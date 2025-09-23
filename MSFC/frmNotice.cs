@@ -15,6 +15,7 @@ namespace MSFC
         public string noticeMsg {  get; set; }
         public frmNotice(string noticeMsg)
         {
+            // test git
             InitializeComponent();
             this.noticeMsg = noticeMsg;
             lbNoticeMsg.Text = noticeMsg;
