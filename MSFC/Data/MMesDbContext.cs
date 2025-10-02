@@ -25,6 +25,8 @@ public partial class MMesDbContext : DbContext
 
     public virtual DbSet<TbImportCursor> TbImportCursors { get; set; }
 
+    public virtual DbSet<TbModelDict> TbModelDicts { get; set; }
+
     public virtual DbSet<TbScanOut> TbScanOuts { get; set; }
 
     public virtual DbSet<TbTagTemp> TbTagTemps { get; set; }
@@ -33,8 +35,8 @@ public partial class MMesDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseMySql("server=127.0.0.1;user=root;password=root;database=mex_mes", Microsoft.EntityFrameworkCore.ServerVersion.Parse("8.0.42-mysql"));
-
+        //=> optionsBuilder.UseMySql("server=10.195.87.245;user=scott;password=ivihaengsung@1;database=mex_mes", Microsoft.EntityFrameworkCore.ServerVersion.Parse("9.1.0-mysql"));
+    => optionsBuilder.UseMySql("server=localhost;user=root;password=root;database=mex_mes", Microsoft.EntityFrameworkCore.ServerVersion.Parse("8.0.42-mysql"));
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder
@@ -145,6 +147,24 @@ public partial class MMesDbContext : DbContext
             entity.Property(e => e.LastStampUtc).HasColumnType("datetime");
         });
 
+        modelBuilder.Entity<TbModelDict>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
+
+            entity.ToTable("tb_model_dict");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Board)
+                .HasMaxLength(45)
+                .HasColumnName("BOARD");
+            entity.Property(e => e.ModelName)
+                .HasMaxLength(45)
+                .HasColumnName("MODEL_NAME");
+            entity.Property(e => e.PartNo)
+                .HasMaxLength(45)
+                .HasColumnName("PART_NO");
+        });
+
         modelBuilder.Entity<TbScanOut>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PRIMARY");
@@ -173,10 +193,12 @@ public partial class MMesDbContext : DbContext
             entity.Property(e => e.PrintAt)
                 .HasColumnType("datetime")
                 .HasColumnName("PRINT_AT");
+            entity.Property(e => e.PrintDate).HasColumnName("PRINT_DATE");
             entity.Property(e => e.Qty).HasColumnName("QTY");
             entity.Property(e => e.ScanAt)
                 .HasColumnType("datetime")
                 .HasColumnName("SCAN_AT");
+            entity.Property(e => e.ScanDate).HasColumnName("SCAN_DATE");
             entity.Property(e => e.SecondInspector)
                 .HasMaxLength(45)
                 .HasColumnName("SECOND_INSPECTOR");

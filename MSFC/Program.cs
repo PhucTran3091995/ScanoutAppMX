@@ -1,9 +1,11 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MSFC.Data;
+using MSFC.Service;
+using MSFC.Service.Translate;
 using MSFC.UI_Automation;
 using ScanOutTool.Services;
 
@@ -17,45 +19,83 @@ namespace MSFC
         [STAThread]
         static void Main()
         {
-            // Load config (appsettings.json)
-            var configuration = new ConfigurationBuilder()
-             .SetBasePath(AppContext.BaseDirectory)
-             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-             .Build();
-
-            var services = new ServiceCollection();
-            services.AddSingleton<IConfiguration>(configuration);
-
-            var host = Host.CreateDefaultBuilder()
-            .ConfigureServices((ctx, services) =>
+            Application.ThreadException += (s, e) =>
             {
-                // Logging (console/file etc. as you like)
-                services.AddLogging(b => b.AddConsole());
+                MessageBox.Show(e.Exception.ToString(), "ThreadException");
+            };
 
-                services.AddSingleton<IConfiguration>(configuration);
-                services.Configure<UiAutomationSettings>(configuration.GetSection("UiAutomation"));
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                // e.ExceptionObject là object, phải cast về Exception
+                var ex = e.ExceptionObject as Exception;
+                MessageBox.Show(ex?.ToString() ?? e.ExceptionObject.ToString(), "UnhandledException");
+            };
 
-                var conn = ctx.Configuration.GetConnectionString("DefaultConnection");
-                // Option B: Register factory
-                services.AddDbContextFactory<MMesDbContext>(o =>
-                    o.UseMySql(conn, ServerVersion.AutoDetect(conn)));
 
-                // UI automation service
-                services.AddSingleton<IAutoScanOutUI, AutoScanOutUI>(); // singleton: one timer/attachment
+            try
+            {
+                var configuration = new ConfigurationBuilder()
+                    .SetBasePath(AppContext.BaseDirectory)
+                    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                    .Build();
 
-                // logging service
-                services.AddSingleton<ILoggingService, LoggingService>();
+                var host = Host.CreateDefaultBuilder()
+                    // đảm bảo content root đúng khi chạy từ nơi khác
+                    .UseContentRoot(AppContext.BaseDirectory)
+                    .ConfigureServices((ctx, services) =>
+                    {
+                        //services.AddLogging(b =>
+                        //{
+                        //    b.AddConsole();
+                        //    // TODO: thêm b.AddFile(...) nếu dùng Serilog/NLog
+                        //});
 
-                // Register form
-                services.AddTransient<Form1>();
-            })
-            .Build();
+                        services.AddSingleton<IConfiguration>(configuration);
+                        services.Configure<UiAutomationSettings>(configuration.GetSection("UiAutomation"));
+                        services.Configure<AutomationConfig2>(configuration.GetSection("AutomationConfig2"));
+                        services.Configure<TranslationConfig>(configuration.GetSection("TranslationConfig"));
 
-            ApplicationConfiguration.Initialize();
+                        //var conn = configuration.GetConnectionString("DefaultConnection");
+                        //var serverVersion = new MySqlServerVersion(new Version(9, 1, 0)); // chỉnh đúng
+                        //services.AddDbContextFactory<MMesDbContext>(o => o.UseMySql(conn, serverVersion));
 
-            // IMPORTANT: Get Form1 from DI
-            var form = host.Services.GetRequiredService<Form1>();
-            Application.Run(form);
+                        var conn = configuration.GetConnectionString("LocalConnection");
+
+                        services.AddDbContextFactory<MMesDbContext>(options =>
+                        {
+                            options.UseMySql(conn, ServerVersion.AutoDetect(conn),
+                                mySqlOptions =>
+                                {
+                                    // tuỳ chọn hữu ích:
+                                    mySqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(5), null);
+                                });
+
+                            // Bật log để thấy lỗi chi tiết
+                            options.EnableSensitiveDataLogging();   // chỉ bật ở dev!
+                            options.EnableDetailedErrors();
+                        });
+
+
+                        services.AddSingleton<ILoggingService, LoggingService>();
+
+                        // Trì hoãn UI automation: đừng làm việc nặng trong ctor/singleton
+                        services.AddSingleton<IAutoScanOutUI, AutoScanOutUI>();
+                        services.AddSingleton<IAutomationService2, AutomationService2>();
+                        services.AddSingleton<ITranslatorService, TranslatorService>();
+
+                        services.AddTransient<Form1>();
+                    })
+                    .Build();
+
+                ApplicationConfiguration.Initialize();
+                var form = host.Services.GetRequiredService<Form1>();
+                Application.Run(form);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "Startup error"); // **quan trọng**
+            }
         }
+
     }
 }

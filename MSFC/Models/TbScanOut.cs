@@ -35,4 +35,8 @@ public partial class TbScanOut
     public string? SecondInspector { get; set; }
 
     public string? _4m { get; set; }
+
+    public DateOnly? ScanDate { get; set; }
+
+    public DateOnly? PrintDate { get; set; }
 }
