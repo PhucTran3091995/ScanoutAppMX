@@ -59,7 +59,18 @@
             pnDetailStatus = new Panel();
             lbDetailStatus = new Label();
             btnPrint = new Button();
+            panel1 = new Panel();
+            tableLayoutPanel1 = new TableLayoutPanel();
             rtxtDetailExplain = new RichTextBox();
+            tbPreviewLabel = new TableLayoutPanel();
+            tbPreview2 = new TableLayoutPanel();
+            lbPreviewPno = new Label();
+            label8 = new Label();
+            tbPreview3 = new TableLayoutPanel();
+            lbPreviewScanQty = new Label();
+            label7 = new Label();
+            tableLayoutPanel2 = new TableLayoutPanel();
+            label4 = new Label();
             tbMain = new TableLayoutPanel();
             label2 = new Label();
             tbSettingEBR = new TableLayoutPanel();
@@ -82,6 +93,12 @@
             pnPID.SuspendLayout();
             pnStatus.SuspendLayout();
             pnDetailStatus.SuspendLayout();
+            panel1.SuspendLayout();
+            tableLayoutPanel1.SuspendLayout();
+            tbPreviewLabel.SuspendLayout();
+            tbPreview2.SuspendLayout();
+            tbPreview3.SuspendLayout();
+            tableLayoutPanel2.SuspendLayout();
             tbMain.SuspendLayout();
             tbSettingEBR.SuspendLayout();
             tbContent.SuspendLayout();
@@ -330,7 +347,7 @@
             tbRight.Controls.Add(pnStatus, 0, 0);
             tbRight.Controls.Add(pnDetailStatus, 0, 1);
             tbRight.Controls.Add(btnPrint, 0, 4);
-            tbRight.Controls.Add(rtxtDetailExplain, 0, 3);
+            tbRight.Controls.Add(panel1, 0, 3);
             tbRight.Dock = DockStyle.Fill;
             tbRight.Location = new Point(283, 3);
             tbRight.Name = "tbRight";
@@ -429,15 +446,161 @@
             btnPrint.UseVisualStyleBackColor = false;
             btnPrint.Click += btnPrint_Click;
             // 
+            // panel1
+            // 
+            panel1.Controls.Add(tableLayoutPanel1);
+            panel1.Dock = DockStyle.Fill;
+            panel1.Location = new Point(3, 203);
+            panel1.Name = "panel1";
+            panel1.Size = new Size(1137, 372);
+            panel1.TabIndex = 4;
+            // 
+            // tableLayoutPanel1
+            // 
+            tableLayoutPanel1.ColumnCount = 2;
+            tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300F));
+            tableLayoutPanel1.Controls.Add(rtxtDetailExplain, 0, 0);
+            tableLayoutPanel1.Controls.Add(tbPreviewLabel, 1, 0);
+            tableLayoutPanel1.Dock = DockStyle.Fill;
+            tableLayoutPanel1.Location = new Point(0, 0);
+            tableLayoutPanel1.Name = "tableLayoutPanel1";
+            tableLayoutPanel1.RowCount = 1;
+            tableLayoutPanel1.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            tableLayoutPanel1.Size = new Size(1137, 372);
+            tableLayoutPanel1.TabIndex = 0;
+            // 
             // rtxtDetailExplain
             // 
+            rtxtDetailExplain.BorderStyle = BorderStyle.FixedSingle;
             rtxtDetailExplain.Dock = DockStyle.Fill;
-            rtxtDetailExplain.Enabled = false;
-            rtxtDetailExplain.Location = new Point(3, 203);
+            rtxtDetailExplain.Location = new Point(3, 3);
             rtxtDetailExplain.Name = "rtxtDetailExplain";
-            rtxtDetailExplain.Size = new Size(1137, 372);
-            rtxtDetailExplain.TabIndex = 4;
+            rtxtDetailExplain.Size = new Size(831, 366);
+            rtxtDetailExplain.TabIndex = 0;
             rtxtDetailExplain.Text = "";
+            // 
+            // tbPreviewLabel
+            // 
+            tbPreviewLabel.ColumnCount = 1;
+            tbPreviewLabel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tbPreviewLabel.Controls.Add(tbPreview2, 0, 1);
+            tbPreviewLabel.Controls.Add(tbPreview3, 0, 2);
+            tbPreviewLabel.Controls.Add(tableLayoutPanel2, 0, 0);
+            tbPreviewLabel.Dock = DockStyle.Fill;
+            tbPreviewLabel.Location = new Point(840, 3);
+            tbPreviewLabel.Name = "tbPreviewLabel";
+            tbPreviewLabel.RowCount = 3;
+            tbPreviewLabel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
+            tbPreviewLabel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            tbPreviewLabel.RowStyles.Add(new RowStyle(SizeType.Absolute, 201F));
+            tbPreviewLabel.Size = new Size(294, 366);
+            tbPreviewLabel.TabIndex = 1;
+            // 
+            // tbPreview2
+            // 
+            tbPreview2.CellBorderStyle = TableLayoutPanelCellBorderStyle.Single;
+            tbPreview2.ColumnCount = 2;
+            tbPreview2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100F));
+            tbPreview2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tbPreview2.Controls.Add(lbPreviewPno, 1, 0);
+            tbPreview2.Controls.Add(label8, 0, 0);
+            tbPreview2.Dock = DockStyle.Fill;
+            tbPreview2.Location = new Point(3, 43);
+            tbPreview2.Name = "tbPreview2";
+            tbPreview2.RowCount = 1;
+            tbPreview2.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            tbPreview2.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
+            tbPreview2.Size = new Size(288, 119);
+            tbPreview2.TabIndex = 1;
+            // 
+            // lbPreviewPno
+            // 
+            lbPreviewPno.AutoSize = true;
+            lbPreviewPno.Dock = DockStyle.Fill;
+            lbPreviewPno.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            lbPreviewPno.Location = new Point(105, 1);
+            lbPreviewPno.Name = "lbPreviewPno";
+            lbPreviewPno.Size = new Size(179, 117);
+            lbPreviewPno.TabIndex = 5;
+            lbPreviewPno.TextAlign = ContentAlignment.MiddleCenter;
+            // 
+            // label8
+            // 
+            label8.AutoSize = true;
+            label8.Dock = DockStyle.Fill;
+            label8.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            label8.Location = new Point(4, 1);
+            label8.Name = "label8";
+            label8.Size = new Size(94, 117);
+            label8.TabIndex = 3;
+            label8.Text = "Número de pieza";
+            label8.TextAlign = ContentAlignment.MiddleCenter;
+            // 
+            // tbPreview3
+            // 
+            tbPreview3.CellBorderStyle = TableLayoutPanelCellBorderStyle.Single;
+            tbPreview3.ColumnCount = 2;
+            tbPreview3.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100F));
+            tbPreview3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tbPreview3.Controls.Add(lbPreviewScanQty, 1, 0);
+            tbPreview3.Controls.Add(label7, 0, 0);
+            tbPreview3.Dock = DockStyle.Fill;
+            tbPreview3.Location = new Point(3, 168);
+            tbPreview3.Name = "tbPreview3";
+            tbPreview3.RowCount = 1;
+            tbPreview3.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            tbPreview3.Size = new Size(288, 195);
+            tbPreview3.TabIndex = 2;
+            // 
+            // lbPreviewScanQty
+            // 
+            lbPreviewScanQty.AutoSize = true;
+            lbPreviewScanQty.Dock = DockStyle.Fill;
+            lbPreviewScanQty.Font = new Font("Arial", 48F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            lbPreviewScanQty.Location = new Point(105, 1);
+            lbPreviewScanQty.Name = "lbPreviewScanQty";
+            lbPreviewScanQty.Size = new Size(179, 193);
+            lbPreviewScanQty.TabIndex = 5;
+            lbPreviewScanQty.TextAlign = ContentAlignment.MiddleCenter;
+            // 
+            // label7
+            // 
+            label7.AutoSize = true;
+            label7.Dock = DockStyle.Fill;
+            label7.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            label7.Location = new Point(4, 1);
+            label7.Name = "label7";
+            label7.Size = new Size(94, 193);
+            label7.TabIndex = 4;
+            label7.Text = "Cantidad";
+            label7.TextAlign = ContentAlignment.MiddleCenter;
+            // 
+            // tableLayoutPanel2
+            // 
+            tableLayoutPanel2.CellBorderStyle = TableLayoutPanelCellBorderStyle.Single;
+            tableLayoutPanel2.ColumnCount = 1;
+            tableLayoutPanel2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            tableLayoutPanel2.Controls.Add(label4, 0, 0);
+            tableLayoutPanel2.Dock = DockStyle.Fill;
+            tableLayoutPanel2.Location = new Point(3, 3);
+            tableLayoutPanel2.Name = "tableLayoutPanel2";
+            tableLayoutPanel2.RowCount = 1;
+            tableLayoutPanel2.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            tableLayoutPanel2.Size = new Size(288, 34);
+            tableLayoutPanel2.TabIndex = 3;
+            // 
+            // label4
+            // 
+            label4.AutoSize = true;
+            label4.Dock = DockStyle.Fill;
+            label4.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            label4.Location = new Point(4, 1);
+            label4.Name = "label4";
+            label4.Size = new Size(280, 32);
+            label4.TabIndex = 2;
+            label4.Text = "Vista previa de la etiqueta";
+            label4.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // tbMain
             // 
@@ -585,6 +748,7 @@
             // 
             // richTextBox1
             // 
+            richTextBox1.BorderStyle = BorderStyle.FixedSingle;
             richTextBox1.Dock = DockStyle.Fill;
             richTextBox1.Location = new Point(1450, 53);
             richTextBox1.Name = "richTextBox1";
@@ -615,6 +779,15 @@
             pnStatus.ResumeLayout(false);
             pnDetailStatus.ResumeLayout(false);
             pnDetailStatus.PerformLayout();
+            panel1.ResumeLayout(false);
+            tableLayoutPanel1.ResumeLayout(false);
+            tbPreviewLabel.ResumeLayout(false);
+            tbPreview2.ResumeLayout(false);
+            tbPreview2.PerformLayout();
+            tbPreview3.ResumeLayout(false);
+            tbPreview3.PerformLayout();
+            tableLayoutPanel2.ResumeLayout(false);
+            tableLayoutPanel2.PerformLayout();
             tbMain.ResumeLayout(false);
             tbSettingEBR.ResumeLayout(false);
             tbSettingEBR.PerformLayout();
@@ -627,7 +800,6 @@
         private TableLayoutPanel tbMain_Row3;
         private TableLayoutPanel tbData;
         private Panel pnRight;
-        private Label label8;
         private Label lbRemainQtyData;
         private Label lbBuyerData;
         private Label lbWoData;
@@ -660,10 +832,23 @@
         private TextBox txtInspector1;
         private Label label5;
         private Label label1;
-        private RichTextBox rtxtDetailExplain;
         private Button btnClearNotice;
         private Button btnTraceAndPrint;
         private Label label2;
         private RichTextBox richTextBox1;
+        private Panel panel1;
+        private TableLayoutPanel tableLayoutPanel1;
+        private RichTextBox rtxtDetailExplain;
+        private TableLayoutPanel tbPreviewLabel;
+        private TableLayoutPanel tableLayoutPanel3;
+        private Label label8;
+        private TableLayoutPanel tableLayoutPanel4;
+        private Label label7;
+        private Label lbPreviewPno;
+        private Label lbPreviewScanQty;
+        private TableLayoutPanel tbPreview2;
+        private TableLayoutPanel tbPreview3;
+        private TableLayoutPanel tableLayoutPanel2;
+        private Label label4;
     }
 }

@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using Microsoft.Win32;
 using MSFC.Data;
 using MSFC.Dto;
 using MSFC.Models;
@@ -20,6 +21,7 @@ using QRCoder;
 using ScanOutTool.Services;
 using System;
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -38,6 +40,7 @@ using System.Runtime.InteropServices; // COMException
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Web;
@@ -53,8 +56,6 @@ using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using static ZXing.QrCode.Internal.Version;
 using Label = System.Windows.Forms.Label;
-using System.Threading;
-using Microsoft.Win32;
 
 
 namespace MSFC
@@ -108,6 +109,7 @@ namespace MSFC
         private readonly object _pendingLock = new();
         private readonly HashSet<string> _pendingPids = new(StringComparer.OrdinalIgnoreCase);
 
+
         public Form1(
             IDbContextFactory<MMesDbContext> dbFactory,
             IConfiguration config,
@@ -152,6 +154,10 @@ namespace MSFC
             SetAutoStart(true);
 
             cbtnConfirmSetting.Checked = true;
+            rtxtDetailExplain.ReadOnly = true;
+            richTextBox1.ReadOnly = true;
+
+
         }
         private void EnsureHandles()
         {
@@ -197,6 +203,8 @@ namespace MSFC
                     var res = _translator.TranslateAndGuide(msg);
                     lbDetailStatus.Text = _translator.Translate(res.Translated);
                     rtxtDetailExplain.AppendText($"\u2605 {res.ExplainEs}\r\n");
+                    rtxtDetailExplain.SelectionStart = richTextBox1.TextLength;
+                    rtxtDetailExplain.ScrollToCaret();
                 }
             }
         }
@@ -235,6 +243,7 @@ namespace MSFC
             { lbl.Text = t; return true; }
             return false;
         }
+     
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool SetIfChanged(System.Windows.Forms.TextBox tb, string text)
@@ -368,6 +377,9 @@ namespace MSFC
                     // thể hiện rõ “OK có lệch EBR”
                     var statusText = mismatch ? "OK (Desajuste de EBR)" : resultRaw;
                     SetIfChanged(lbStatus, statusText);
+                    // Set preview
+                    SetIfChanged(lbPreviewPno, data.EBR);
+                    SetIfChanged(lbPreviewScanQty, _pendingPids.Count().ToString());
 
                     // 6.5) Message detail – chỉ viết khi có & khác
                     if (!string.IsNullOrWhiteSpace(data.Message)) msgs.Add(data.Message);
@@ -472,6 +484,10 @@ namespace MSFC
                 //Scan item
                 lbPID.Text = "-";
                 txtSettingEBR.Clear();
+
+                // Clear prevew
+                lbPreviewPno.Text = "";
+                lbPreviewScanQty.Text = "";
 
                 // Clear data
                 // Reset biến/UI
@@ -1240,13 +1256,14 @@ namespace MSFC
                         // Check DB connection
                         using var db = await _dbFactory.CreateDbContextAsync();
                         canConnect = await db.Database.CanConnectAsync();
-                        if (!canConnect) {
+                        if (!canConnect)
+                        {
                             dbMsg = "No se pudo conectar a la base de datos.";
                             AddLog($"============ Connect to DB fail ============");
                             await Task.Delay(delayMs);
                             continue;
                         }
-                      
+
 
                         // Check SFC attach
                         try
@@ -1272,7 +1289,7 @@ namespace MSFC
 
                     }
 
-                  
+
 
                     if (!attached || !canConnect)
                     {
@@ -1283,8 +1300,8 @@ namespace MSFC
                         return;
                     }
 
-                   
-                  
+
+
 
                     try
                     {
@@ -1324,7 +1341,7 @@ namespace MSFC
                     }
                     catch (Exception ex)
                     {
-                       AddLog($"Error: {ex.Message}");
+                        AddLog($"Error: {ex.Message}");
                     }
                     finally
                     {
@@ -1838,19 +1855,7 @@ namespace MSFC
                             Message = data.Message,
                             Progress = data.Progress
                         };
-
-                        //// Cách cũ không có track số lượng upload đang chạy
-                        //_ = Task.Factory.StartNew(async () =>
-                        //{
-                        //    try { await UploadToDb(snap, ct).ConfigureAwait(false); }
-                        //    catch (Exception ex) { AddLog("UploadToDb error: " + ex.Message); }
-                        //    finally { }
-                        //}, ct, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-
-                        // Cách mới có track số lượng upload đang chạy + tránh trùng PID
-
                         _uploadSvc.Enqueue(snap); // fire-and-forget, chạy nền
-
                     }
                     _building = false;
                 }
@@ -2044,6 +2049,11 @@ namespace MSFC
                 AddLog("SetAutoStart error: " + ex.Message);
             }
         }
+
+        private void label4_Click(object sender, EventArgs e)
+        {
+
+        }
     }
     // 1) Helper: STA worker (một thread STA có queue)
     public sealed class StaWorker : IDisposable
@@ -2218,5 +2228,5 @@ namespace MSFC
             _cts.Dispose();
         }
     }
-
+    
 }
