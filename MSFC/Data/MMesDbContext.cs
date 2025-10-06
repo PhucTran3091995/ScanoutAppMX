@@ -1,8 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using MSFC.Models;
-using Microsoft.EntityFrameworkCore;
 using Pomelo.EntityFrameworkCore.MySql.Scaffolding.Internal;
+using System;
+using System.Collections.Generic;
 
 namespace MSFC.Data;
 
@@ -33,10 +34,28 @@ public partial class MMesDbContext : DbContext
 
     public virtual DbSet<TbUser> TbUsers { get; set; }
 
+    //protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    //    //=> optionsBuilder.UseMySql("server=10.195.87.245;user=scott;password=ivihaengsung@1;database=mex_mes", Microsoft.EntityFrameworkCore.ServerVersion.Parse("9.1.0-mysql"));
+    //=> optionsBuilder.UseMySql("server=localhost;user=root;password=root;database=mex_mes", Microsoft.EntityFrameworkCore.ServerVersion.Parse("8.0.42-mysql"));
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        //=> optionsBuilder.UseMySql("server=10.195.87.245;user=scott;password=ivihaengsung@1;database=mex_mes", Microsoft.EntityFrameworkCore.ServerVersion.Parse("9.1.0-mysql"));
-    => optionsBuilder.UseMySql("server=localhost;user=root;password=root;database=mex_mes", Microsoft.EntityFrameworkCore.ServerVersion.Parse("8.0.42-mysql"));
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            // fallback nếu DI chưa cấu hình, đọc file cấu hình thủ công
+            var config = new ConfigurationBuilder()
+                .SetBasePath(AppContext.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
+
+            var conn = config.GetConnectionString("DefaultConnection");
+            var serverVersion = new MySqlServerVersion(new Version(9, 1, 0));
+
+            //var conn = config.GetConnectionString("LocalConnection");
+            //var serverVersion = new MySqlServerVersion(new Version(8, 0, 42));
+
+            optionsBuilder.UseMySql(conn, serverVersion);
+        }
+    }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder

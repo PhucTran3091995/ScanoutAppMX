@@ -19,6 +19,7 @@ using MSFC.UC;
 using QRCoder;
 using ScanOutTool.Services;
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -28,15 +29,16 @@ using System.Globalization;
 using System.IO;
 using System.IO.Ports;
 using System.Media;
-using System.Media;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices; // COMException
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Web;
 using System.Windows.Forms.DataVisualization.Charting;
@@ -50,6 +52,10 @@ using static FlaUI.Core.FrameworkAutomationElementBase;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using static ZXing.QrCode.Internal.Version;
+using Label = System.Windows.Forms.Label;
+using System.Threading;
+using Microsoft.Win32;
+
 
 namespace MSFC
 {
@@ -77,8 +83,16 @@ namespace MSFC
         private readonly object _pidLock = new();
         private string? _lastPidValue;
         private string? _lastStatusValue;
+        private readonly StaWorker _uiaWorker = new StaWorker();   // dùng cho mọi lệnh UIA: GetText/Find...
+        private PCB _lastUi;                                       // nếu bạn dùng so sánh UI
+
         //========== UI automation theo GMES 2.0 ==========
         private readonly ITranslatorService _translator;
+
+        // handles cache
+        private AutomationElement _pidEl, _resultEl, _ebrEl, _woEl, _qtyEl, _resultUcEl;
+        private readonly object _elLock = new object();
+
 
         //========== Sound alarm ==========
         SoundPlayer OKplayer = new SoundPlayer(new MemoryStream(Properties.Resources.PASS));
@@ -131,10 +145,40 @@ namespace MSFC
 
             //========== Translation ==========
             _translator = translator;
-            ////========== Sound ==========
-            //OKplayer.Load();
-            //NGplayer.Load();
+
+            //========== Khởi tạo service dùng để upload db ==========
+            InitUploadService();
+
+            SetAutoStart(true);
+
+            cbtnConfirmSetting.Checked = true;
         }
+        private void EnsureHandles()
+        {
+            // tránh race nếu STA worker và thread khác cùng vào
+            lock (_elLock)
+            {
+                if (_pidEl == null) _pidEl = _automationService2.GetControlById(_config2.Controls.PID);
+                if (_resultEl == null) _resultEl = _automationService2.GetChildControl(_config2.Controls.ResultUc, _config2.Controls.ResultText);
+                if (_ebrEl == null) _ebrEl = _automationService2.GetChildControl(_config2.Controls.ModelSuffixUc, "txtText");
+                if (_woEl == null) _woEl = _automationService2.GetChildControl(_config2.Controls.WorkOrderUc, "txtText");
+                if (_qtyEl == null) _qtyEl = _automationService2.GetControlById(_config2.Controls.ResultQty);
+                if (_resultUcEl == null) _resultUcEl = _automationService2.GetControlById(_config2.Controls.ResultUc);
+            }
+        }
+
+        private void InvalidateHandlesIfNulls(params string[] which)
+        {
+            // khi đọc ra null/hỏng, refresh cache & resolve lại đúng handle
+            _automationService2.RefreshCache();
+            _pidEl = _pidEl ?? _automationService2.GetControlById(_config2.Controls.PID);
+            _resultEl = _resultEl ?? _automationService2.GetChildControl(_config2.Controls.ResultUc, _config2.Controls.ResultText);
+            _ebrEl = _ebrEl ?? _automationService2.GetChildControl(_config2.Controls.ModelSuffixUc, "txtText");
+            _woEl = _woEl ?? _automationService2.GetChildControl(_config2.Controls.WorkOrderUc, "txtText");
+            _qtyEl = _qtyEl ?? _automationService2.GetControlById(_config2.Controls.ResultQty);
+            _resultUcEl = _resultUcEl ?? _automationService2.GetControlById(_config2.Controls.ResultUc);
+        }
+
 
         private void ResetRtxtDetailExplain()
         {
@@ -143,129 +187,225 @@ namespace MSFC
             rtxtDetailExplain.BackColor = SystemColors.Window;
             rtxtDetailExplain.Font = new Font(rtxtDetailExplain.Font.FontFamily, 9, FontStyle.Regular);
         }
-        public bool IsWarningEbrMessage(string msg)
+        private void ShowNoticeAndExplain(List<string> msgs)
         {
-            var pattern = @"^⚠️ P/No escaneado \(.*?\) no coincide con P/No configurado \(.*?\)\.$";
-            return Regex.IsMatch(msg, pattern, RegexOptions.IgnoreCase);
+            if (msgs.Count != 0)
+            {
+                rtxtDetailExplain.Clear();
+                foreach (var msg in msgs)
+                {
+                    var res = _translator.TranslateAndGuide(msg);
+                    lbDetailStatus.Text = _translator.Translate(res.Translated);
+                    rtxtDetailExplain.AppendText($"\u2605 {res.ExplainEs}\r\n");
+                }
+            }
         }
-        private void ShowNoticeAndExplain(string msg)
+
+        // ======= helpers =======
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, bool wParam, int lParam);
+        const int WM_SETREDRAW = 0x000B;
+
+        sealed class RedrawScope : IDisposable
         {
-            //int line = rtxtDetailExplain.Lines.Length + 1;
-
-            //if (!string.IsNullOrEmpty(msg))
-            //{
-            //    if (!IsWarningEbrMessage(msg)) // Nếu không phải cảnh báo sai EBR thì cần tra dict để hiển thị hướng dẫn + thông báo bằng Es
-            //    {
-            //        var res = _translator.TranslateAndGuide(msg);
-            //        lbDetailStatus.Text = _translator.Translate(res.Translated);
-            //        rtxtDetailExplain.AppendText($"\u2605 {res.ExplainEs}\r\n");
-            //    }
-            //    else
-            //    {
-            //        rtxtDetailExplain.AppendText($"\u2605 {msg} → Por favor clasificar en el lugar correcto.\r\n");
-            //    }
-            //}
-
-
-
-
+            private readonly Control _ctrl;
+            public RedrawScope(Control ctrl)
+            {
+                _ctrl = ctrl;
+                if (ctrl?.IsHandleCreated == true)
+                    SendMessage(ctrl.Handle, WM_SETREDRAW, false, 0);
+            }
+            public void Dispose()
+            {
+                if (_ctrl?.IsHandleCreated == true)
+                {
+                    SendMessage(_ctrl.Handle, WM_SETREDRAW, true, 0);
+                    _ctrl.Invalidate(true);
+                    _ctrl.Update();
+                }
+            }
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool SetIfChanged(Label lbl, string text)
+        {
+            var t = text ?? string.Empty;
+            if (!string.Equals(lbl.Text, t, StringComparison.OrdinalIgnoreCase))
+            { lbl.Text = t; return true; }
+            return false;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool SetIfChanged(System.Windows.Forms.TextBox tb, string text)
+        {
+            var t = text ?? string.Empty;
+            if (!string.Equals(tb.Text, t, StringComparison.OrdinalIgnoreCase))
+            { tb.Text = t; return true; }
+            return false;
+        }
+
+        // Khai báo static field
+        private static System.Media.SoundPlayer _okPlayer;
+        private static System.Media.SoundPlayer _ngPlayer;
+        private static volatile bool _soundReady;
+        private static readonly object _soundLock = new();
+
+        // Hàm đảm bảo nạp resource chỉ 1 lần
+        private void EnsureSoundsLoaded()
+        {
+            if (_soundReady) return;
+            lock (_soundLock)
+            {
+                if (_soundReady) return;
+
+                // Dùng resource nhúng (Properties.Resources.PASS/FAIL là byte[])
+                _okPlayer = new System.Media.SoundPlayer(new MemoryStream(Properties.Resources.PASS));
+                _ngPlayer = new System.Media.SoundPlayer(new MemoryStream(Properties.Resources.FAIL));
+
+                _okPlayer.Load();   // preload vào RAM
+                _ngPlayer.Load();
+
+                _soundReady = true;
+            }
+        }
+
+        // Hàm phát âm thanh (đã preload)
+        private long _lastSoundTick;
+        private const int SoundMinGapMs = 120; // tránh phát 2 lần dính nhau
+
+        private void PlaySoundOk()
+        {
+            EnsureSoundsLoaded();
+            var now = Environment.TickCount64;
+            if (now - _lastSoundTick >= SoundMinGapMs)
+            {
+                _okPlayer?.Play();
+                _lastSoundTick = now;
+            }
+        }
+
+        private void PlaySoundNg()
+        {
+            EnsureSoundsLoaded();
+            var now = Environment.TickCount64;
+            if (now - _lastSoundTick >= SoundMinGapMs)
+            {
+                _ngPlayer?.Play();
+                _lastSoundTick = now;
+            }
+        }
+
+
+
+        // tránh Update chart nặng khi không đổi
+        private (int done, int total) _lastProgress = (-1, -1);
+
+        // ======= UpdateUI tối ưu (UI-thread) =======
 
         private void UpdateUI(PCB data)
         {
             if (data == null) return;
             if (!this.IsHandleCreated || this.IsDisposed) return;
 
-            this.BeginInvoke(new Action(() =>
+            // Giảm repaint trong khi set nhiều control
+            using (new RedrawScope(this))
             {
-                try
+                // 1) Chuẩn hoá chuỗi
+                var resultRaw = data.Result ?? string.Empty;
+                var resultClean = resultRaw.Trim();
+                var ebrCur = (data.EBR ?? string.Empty).Trim();
+                var ebrSetting = (_settingEBR ?? string.Empty).Trim();
+
+                // 2) Phân loại
+                var kind = Classify(resultClean);
+
+                // 3) EBR mismatch → ép NG khi OK
+                bool hasSetting = !string.IsNullOrWhiteSpace(ebrSetting);
+                bool mismatch = hasSetting && !string.Equals(ebrCur, ebrSetting, StringComparison.OrdinalIgnoreCase);
+                var finalKind = (kind == ResultKind.Ok && mismatch) ? ResultKind.Ng : kind;
+
+                // 4) Chỉ Apply style khi khác lần trước (nếu bạn có lưu trạng thái)
+                ApplyStatusStyle(finalKind);
+
+                // 5) Gắn EBR setting lần đầu(chỉ khi khác)
+                if (kind == ResultKind.Ok && string.IsNullOrWhiteSpace(txtSettingEBR.Text))
                 {
-                    ResetRtxtDetailExplain();
-
-                    // 1) Chuẩn hoá chuỗi để so sánh an toàn
-                    var resultRaw = data.Result ?? string.Empty;
-                    var resultClean = resultRaw.Trim();             // hoặc CleanResult(resultRaw)
-                    var ebrCur = (data.EBR ?? string.Empty).Trim();
-                    var ebrSetting = (_settingEBR ?? string.Empty).Trim();
-
-                    // 2) Phân loại kết quả gốc
-                    var kind = Classify(resultClean);               // Ok / Ng / Ready
-
-                    // 3) Nếu OK nhưng EBR khác setting -> ép lỗi (mismatch coi như NG)
-                    bool hasSetting = !string.IsNullOrWhiteSpace(ebrSetting);
-                    bool mismatch = hasSetting && !string.Equals(ebrCur, ebrSetting, StringComparison.OrdinalIgnoreCase);
-
-                    var finalKind = kind;
-                    if (kind == ResultKind.Ok && mismatch)
+                    if (SetIfChanged(txtSettingEBR, ebrCur))
                     {
-                        finalKind = ResultKind.Ng;                  // ép NG khi lệch EBR
-                    }
-
-                    // 4) Áp style theo finalKind (không theo kind gốc)
-                    ApplyStatusStyle(finalKind);
-
-                    // 5) Gắn EBR setting lần đầu nếu trống và kết quả OK (không có setting để so sánh)
-                    if (kind == ResultKind.Ok && string.IsNullOrWhiteSpace(txtSettingEBR.Text))
-                    {
-                        txtSettingEBR.Text = ebrCur;
                         _settingEBR = ebrCur;
-                        // cập nhật lại ebrSetting/hasSetting nếu muốn, nhưng không cần ngay bây giờ
-                    }
-
-                    // 6) Nếu có PID thì render chi tiết
-                    if (!string.IsNullOrWhiteSpace(data.PID))
-                    {
-                        // 6.1) Cảnh báo mismatch (nếu có)
-                        if (mismatch)
-                        {
-                            var msg = $"⚠️ P/No escaneado ({ebrCur}) no coincide con P/No configurado ({ebrSetting}).";
-                            ShowNoticeAndExplain(msg);
-                        }
-
-                        // 6.2) Âm thanh theo finalKind (KHÔNG phát OK khi lệch EBR)
-                        if (finalKind == ResultKind.Ng) _ = PlayNgAsync();
-                        else if (finalKind == ResultKind.Ok) _ = PlayOkAsync();
-
-                        // 6.3) Left panel
-                        lbModelSuffixData.Text = ebrCur;
-                        lbWoData.Text = data.WO ?? string.Empty;
-                        lbBuyerData.Text = data.Buyer ?? string.Empty;
-
-                        // 6.4) Right panel
-                        lbPID.Text = $"PCBA S/N: {data.PID}";
-                        lbStatus.Text = mismatch ? "OK (Desajuste de EBR)" : resultRaw; // thể hiện rõ “OK có lệch EBR”
-
-                        // 6.5) Message detail (nếu có)
-                        if (!string.IsNullOrWhiteSpace(data.Message))
-                            ShowNoticeAndExplain(data.Message);
-
-                        // 6.6) Progress: CHỈ cập nhật khi finalKind là OK (tức không mismatch)
-                        if (finalKind == ResultKind.Ok)
-                        {
-                            var (completedQty, woQty) = ExtractProgressSafe(data.Progress);
-                            var total = woQty;
-                            var completed = completedQty;
-                            var remain = Math.Max(0, total - completed);
-
-                            lbRemainQtyData.Text = remain.ToString();
-                            SetWorkOrderProgress(chartProgress, lbProgressData,
-                                                 completed: Math.Max(0, completed),
-                                                 total: Math.Max(1, total)); // tránh /0
-                        }
                     }
                 }
-                catch (Exception ex)
+                //if (SetIfChanged(txtSettingEBR, ebrCur))
+                //{
+                //    _settingEBR = ebrCur;
+                //}
+                List<string> msgs = new List<string>();
+                // 6) Render khi có PID
+                if (!string.IsNullOrWhiteSpace(data.PID))
                 {
-                    AddLog("UI error: " + ex.Message);
+                    // 6.1) Cảnh báo mismatch: chỉ append khi thực sự có mismatch
+                    if (mismatch)
+                    {
+                        // Tránh Reset + Append liên tục: chỉ reset khi nội dung khác
+                        var warn = $"⚠️ P/No escaneado ({ebrCur}) no coincide con P/No configurado ({ebrSetting}) → Por favor clasificar en el lugar correcto.";
+                        //ShowNoticeAndExplain(warn);
+                        msgs.Add(warn);
+
+                    }
+
+                    // 6.2) Âm thanh: đã preload + debounce
+                    if (finalKind == ResultKind.Ng) PlaySoundNg();
+                    else if (finalKind == ResultKind.Ok) PlaySoundOk();
+
+                    // 6.3) Left panel (chỉ set khi khác để không trigger layout)
+                    SetIfChanged(lbModelSuffixData, ebrCur);
+                    SetIfChanged(lbWoData, data.WO ?? string.Empty);
+                    SetIfChanged(lbBuyerData, data.Buyer ?? string.Empty);
+
+                    // 6.4) Right panel
+                    SetIfChanged(lbPID, $"PCBA S/N: {data.PID}");
+                    // thể hiện rõ “OK có lệch EBR”
+                    var statusText = mismatch ? "OK (Desajuste de EBR)" : resultRaw;
+                    SetIfChanged(lbStatus, statusText);
+
+                    // 6.5) Message detail – chỉ viết khi có & khác
+                    if (!string.IsNullOrWhiteSpace(data.Message)) msgs.Add(data.Message);
+
+                    ShowNoticeAndExplain(msgs);
+                    //ShowNoticeAndExplain(data.Message);
+                    // 6.6) Progress – chỉ cập nhật khi OK (không mismatch) **và** giá trị khác
+                    if (finalKind == ResultKind.Ok)
+                    {
+                        var (completedQty, woQty) = ExtractProgressSafe(data.Progress);
+                        int done = Math.Max(0, completedQty);
+                        int total = Math.Max(1, woQty);
+                        var remain = Math.Max(0, total - done);
+
+                        // Set label nếu khác
+                        if (!string.Equals(lbRemainQtyData.Text, remain.ToString(), StringComparison.Ordinal))
+                            lbRemainQtyData.Text = remain.ToString();
+
+                        // Check thay đổi trước khi vẽ chart
+                        if (_lastProgress.done != done || _lastProgress.total != total)
+                        {
+                            _lastProgress = (done, total);
+                            // nếu SetWorkOrderProgress nặng, bọc thêm SuspendLayout/ResumeLayout của chart
+                            chartProgress.SuspendLayout();
+                            try
+                            {
+                                SetWorkOrderProgress(chartProgress, lbProgressData, done, total);
+                            }
+                            finally
+                            {
+                                chartProgress.ResumeLayout();
+                            }
+                        }
+                    }
                 }
-            }));
+            }
         }
 
-
-        /// <summary>
-        /// ExtractProgress an toàn: không ném exception, trả (0,0) khi input không khớp.
-        /// Kỳ vọng: "161 / 360" hoặc "45% (161/360)" → tuỳ regex bạn đang hỗ trợ.
-        /// </summary>
         private static (int CompletedQty, int WoQty) ExtractProgressSafe(string input)
         {
             try
@@ -331,7 +471,19 @@ namespace MSFC
 
                 //Scan item
                 lbPID.Text = "-";
+                txtSettingEBR.Clear();
+
+                // Clear data
+                // Reset biến/UI
+                _tagLabel = new ManufacturingTagDto();
                 _lastPidValue = string.Empty;
+                _lastStatusValue = string.Empty;
+                _settingEBR = string.Empty;
+                lock (_pendingLock)
+                {
+                    _pendingPids.Clear();
+                }
+
 
                 // Clear lỗi trên SFC
                 _automationService2.ClickTo(_config2.Controls.ClearButton);
@@ -344,14 +496,6 @@ namespace MSFC
             }
         }
 
-        private async Task PlayNgAsync()
-        {
-            NGplayer.PlaySync();
-        }
-        private async Task PlayOkAsync()
-        {
-            OKplayer.PlaySync();
-        }
         private enum ResultKind { Ok, Ng, Other }
 
         private static bool HasWord(string s, string word)
@@ -403,20 +547,13 @@ namespace MSFC
             }
         }
 
+
+
+        #region Task upload PID lên DB
+
         private async Task UploadToDb(PCB data, CancellationToken ct = default)
         {
-            //// B1: đọc control UI trên UI thread
-            //var ui = await OnUiAsync(() => new
-            //{
-            //    Inspector1 = txtInspector1.Text?.Trim(),
-            //    Inspector2 = txtInspector2.Text?.Trim()
-            //});
-
-            //// B2: đọc config (không cần UI thread)
-            //var section = _config.GetSection("TagSetting");
-            //string _4M = section["4M"] ?? string.Empty;
-
-
+            AddLog($"[DEBUG] Snap Data");
             // Chuẩn bị entity
             var scanOutData = new TbScanOut
             {
@@ -439,23 +576,27 @@ namespace MSFC
             {
                 await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
+                AddLog($"[DEBUG]Check exist");
                 // Check tồn tại theo PID
                 bool exists = await db.TbScanOuts
                     .AnyAsync(x => x.Pid == data.PID, ct)
                     .ConfigureAwait(false);
 
-                if (!exists)
+                if (exists)
                 {
-                    await db.TbScanOuts.AddAsync(scanOutData, ct).ConfigureAwait(false);
-                    await db.SaveChangesAsync(ct).ConfigureAwait(false);
-                    lock (_pendingLock)
-                    {
-                        if (!string.IsNullOrWhiteSpace(data.PID))
-                            _pendingPids.Add(data.PID.Trim());
-                    }
+                    AddLog($"[DEBUG]PID exist, Ignore");
+                    return;
                 }
 
-                // Giả sử data.PID là khóa duy nhất
+                AddLog($"[DEBUG]No exist, start insert");
+                await db.TbScanOuts.AddAsync(scanOutData, ct).ConfigureAwait(false);
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                AddLog($"[DEBUG] Finish insert");
+                lock (_pendingLock)
+                {
+                    _pendingPids.Add(data.PID);
+                }
+                AddLog($"[DEBUG] Add to _pendingPids");
 
 
             }
@@ -467,7 +608,24 @@ namespace MSFC
                 // throw;
             }
         }
+        private UploadBackgroundService _uploadSvc;
 
+        private void InitUploadService()
+        {
+            _uploadSvc = new UploadBackgroundService(
+                uploadFunc: async (snap, ct) =>
+                {
+                    // chính là UploadToDb của bạn (KHÔNG chạm UI ở đây)
+                    await UploadToDb(snap, ct).ConfigureAwait(false);
+                },
+                maxDegreeOfParallelism: 2 // muốn 1 → chạy lần lượt; >1 → song song
+            );
+        }
+
+
+
+
+        #endregion
 
         public static string GetLast11(string input)
         {
@@ -508,67 +666,6 @@ namespace MSFC
             s = (s ?? string.Empty).Replace(",", "").Replace(".", "");
             return int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : 0;
         }
-        //private void GenerateLabel(object sender, PrintPageEventArgs e)
-        //{
-        //    var g = e.Graphics;
-        //    using var font = new Font("Arial", 10);
-        //    using var bold = new Font("Arial", 12, FontStyle.Bold);
-
-        //    int left = 40, top = 40;
-        //    int col1 = 140, col2 = 260;
-        //    int rowH = 30, headerH = 34;
-        //    int rowsCount = 8;   // ✅ was 7, now 8 (extra barcode row)
-        //    int totalH = headerH + rowsCount * rowH;
-
-        //    // border
-        //    g.DrawRectangle(Pens.Black, left, top, col1 + col2, totalH);
-
-        //    // header
-        //    var headerRect = new Rectangle(left, top, col1 + col2, headerH);
-        //    using var sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        //    g.DrawString("Manufacturing Tag", bold, Brushes.Black, headerRect, sfCenter);
-
-        //    int y = top + headerH;
-        //    g.DrawLine(Pens.Black, left, y, left + col1 + col2, y);
-
-        //    string[,] rows =
-        //    {
-        //        { "Model",         tagLabel.Model },
-        //        { "Date",          tagLabel.Date },
-        //        { "Part No",       tagLabel.PartNo },
-        //        { "Q’TY",          tagLabel.Quantity.ToString() },
-        //        { "1st Inspector", tagLabel.Inspector1 },
-        //        { "2nd Inspector", tagLabel.Inspector2 },
-        //        { "4M",            tagLabel.Process },
-        //        { "Barcode",       "" }
-        //    };
-
-        //    for (int i = 0; i < rowsCount; i++)
-        //    {
-        //        var rowTop = y + i * rowH;
-
-        //        // vertical split
-        //        g.DrawLine(Pens.Black, left + col1, rowTop, left + col1, rowTop + rowH);
-        //        // bottom line
-        //        g.DrawLine(Pens.Black, left, rowTop + rowH, left + col1 + col2, rowTop + rowH);
-
-        //        // left column label
-        //        g.DrawString(rows[i, 0], font, Brushes.Black, new RectangleF(left + 6, rowTop + 6, col1 - 12, rowH - 12));
-
-        //        if (i < rowsCount - 1) // normal rows
-        //        {
-        //            g.DrawString(rows[i, 1], font, Brushes.Black,
-        //                new RectangleF(left + col1 + 6, rowTop + 6, col2 - 12, rowH - 12));
-        //        }
-        //        else // ✅ barcode row
-        //        {
-        //            var barcodeImg = GenerateBarcode(tagLabel.TagId);
-        //            g.DrawImage(barcodeImg, left + col1 + 6, rowTop + 2, col2 - 12, rowH - 4);
-        //        }
-        //    }
-
-
-        //}
 
         private Bitmap GenerateBarcode(long value)
         {
@@ -634,7 +731,6 @@ namespace MSFC
 
             // 2. Send PID to SFC
             _portSFC.WriteLine($"{CurrentPid}");
-
 
 
         }
@@ -748,95 +844,25 @@ namespace MSFC
             return tagIdValue;
         }
 
-
-
-        //private async void btnPrint_Click(object sender, EventArgs e)
-        //{
-        //    try
-        //    {
-        //        if (lbStatus.Text.Equals("OK", StringComparison.OrdinalIgnoreCase))
-        //        {
-        //            AddLog($"Start query\r\n");
-        //            // 1. Get tag data to print
-        //            using var db = await _dbFactory.CreateDbContextAsync();
-        //            var tagDatas = await db.TbScanOuts
-        //                .Where(x =>
-        //                x.ClientId == _ClientIp &&
-        //                x.PartNo == _settingEBR &&
-        //                !x.TagId.HasValue
-        //                )
-        //                .ToListAsync();
-
-        //            if (tagDatas == null)
-        //            {
-        //                ShowDetailStatus($"Not found any data matching for {_lastPidValue}");
-        //                return;
-        //            }
-        //            AddLog($"Gen TagID\r\n");
-        //            DateTime now = DateTime.Now;
-        //            long tagId = GenerateTagId();
-
-        //            AddLog($"Assign data for tag label\r\n");
-        //            _tagLabel = new ManufacturingTagDto()
-        //            {
-        //                Model = tagDatas[0].ModelSuffix,
-        //                Date = now.ToString("dd/MM/yyyy"),
-        //                PartNo = tagDatas[0].PartNo,
-        //                Quantity = tagDatas.Count,
-        //                Inspector1 = _inspector1,
-        //                Inspector2 = _inspector2,
-        //                FourM = _4M,
-        //                Process = "",
-        //                TagId = tagId,
-        //                PidList = tagDatas.Select(x => x.Pid).ToList()
-        //            };
-        //            AddLog($"Print\r\n");
-        //            PrintTag(_tagLabel);
-
-        //            AddLog($"Udpate DB\r\n");
-        //            // 3. Update tagID for matched PID in tb_scan_out
-        //            await db.TbScanOuts
-        //            .Where(x => _tagLabel.PidList.Contains(x.Pid))
-        //            .ExecuteUpdateAsync(s => s
-        //                .SetProperty(r => r.TagId, r => tagId)
-        //                .SetProperty(r => r.PrintAt, r => DateTime.Now)
-        //                .SetProperty(r => r.PrintDate, r => DateOnly.FromDateTime(DateTime.Now))
-        //            );
-
-
-        //            AddLog($"Reset global varible\r\n");
-        //            // 5. Reset tagLabel & CurrentPid
-        //            _tagLabel = new ManufacturingTagDto();
-        //            _lastPidValue = string.Empty;
-        //            _lastStatusValue = string.Empty;
-
-        //            AddLog($"Reset UI\r\n");
-        //            // 6. Reset UI & focus lại vào SFC
-        //            resetUI();
-        //        }
-        //        else
-        //        {
-        //            var msg = $"El último PID escaneado debe ser el mismo que la configuración EBR y debe tener un resultado OK.";
-        //            ShowDetailStatus(msg);
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-
-        //        AddLog(ex.Message);
-        //    }
-
-
-        //}
         private async void btnPrint_Click(object sender, EventArgs e)
         {
+            var msg = string.Empty;
+            if (_uploadSvc.IsAnyRunning())
+            {
+                msg = "Sincronizando servidor, por favor espere";
+                ShowDetailStatus(msg);
+                await _uploadSvc.WaitAllIdleAsync();
+            }
+
+            msg = "Sincronización completada. Comienza a imprimir sellos.";
+            ShowDetailStatus(msg);
             try
             {
-                if (!lbStatus.Text.Equals("OK", StringComparison.OrdinalIgnoreCase))
-                {
-                    ShowDetailStatus("El último PID escaneado debe ser OK y coincidir con EBR.");
-                    return;
-                }
+                //if (!lbStatus.Text.Equals("OK", StringComparison.OrdinalIgnoreCase))
+                //{
+                //    ShowDetailStatus("El último PID escaneado debe ser OK y coincidir con EBR.");
+                //    return;
+                //}
 
                 // snapshot danh sách PID đang chờ in (batch hiện tại)
                 string[] batchPids;
@@ -844,6 +870,10 @@ namespace MSFC
                 {
                     batchPids = _pendingPids.ToArray();
                 }
+                AddLog($"[DEBUG] batchPids: {string.Join(",\r\n", batchPids)}");
+                AddLog($"[DEBUG] _ClientIp: {_ClientIp}, _settingEBR: {_settingEBR}");
+
+                // And after fetching tagDatas:
 
                 if (batchPids.Length == 0)
                 {
@@ -851,45 +881,35 @@ namespace MSFC
                     return;
                 }
 
-                //AddLog("Start query (batch only)\r\n");
-
                 using var db = await _dbFactory.CreateDbContextAsync();
 
                 // Lấy đúng các dòng thuộc batch hiện tại, chưa in
-                //var tagDatas = await db.TbScanOuts
-                //    .Where(x => x.ClientId == _ClientIp
-                //                && x.PartNo == _settingEBR
-                //                && !x.TagId.HasValue
-                //                && batchPids.Contains(x.Pid))
-                //    .ToListAsync();
                 var tagDatas = await (
-                     from s in db.TbScanOuts
-                     join m in db.TbModelDicts on s.PartNo equals m.PartNo
-                     where s.ClientId == _ClientIp
-                           && s.PartNo == _settingEBR
-                           && !s.TagId.HasValue
-                           && batchPids.Contains(s.Pid)
-                     select new
-                     {
-                         PartNo = m.PartNo,
-                         ModelName = m.ModelName,
-                         Board = m.Board,
-                         Pid = s.Pid
-                     }
+                    from s in db.TbScanOuts
+                    join m in db.TbModelDicts on s.PartNo equals m.PartNo into gj
+                    from m in gj.DefaultIfEmpty()     // <-- left join
+                    where batchPids.Contains(s.Pid)
+                    select new
+                    {
+                        PartNo = m != null ? m.PartNo : null,   // có thể null nếu không match
+                        ModelName = m != null ? m.ModelName : null,
+                        Board = m != null ? m.Board : null,
+                        Pid = s.Pid
+                    }
                 ).ToListAsync();
 
+                AddLog($"[DEBUG] tagDatas.Count: {tagDatas.Count}");
                 if (tagDatas.Count == 0)
                 {
                     ShowDetailStatus("No se encontraron PIDs válidos en el lote actual.");
-                    // loại các PID không còn match khỏi batch để tránh lặp vô hạn
-                    lock (_pendingLock)
-                    {
-                        foreach (var pid in batchPids) _pendingPids.Remove(pid);
-                    }
+                    //// loại các PID không còn match khỏi batch để tránh lặp vô hạn
+                    //lock (_pendingLock)
+                    //{
+                    //    foreach (var pid in batchPids) _pendingPids.Remove(pid);
+                    //}
                     return;
                 }
 
-                //AddLog("Gen TagID\r\n");
                 var now = DateTime.Now;
                 long tagId = GenerateTagId();
 
@@ -899,7 +919,7 @@ namespace MSFC
                     ModelName = $"{tagDatas[0].ModelName}-{tagDatas[0].Board}",
                     Date = now.ToString("dd/MM/yyyy"),
                     PartNo = tagDatas[0].PartNo,
-                    Quantity = tagDatas.Count,                // ✅ chỉ đếm batch hiện tại
+                    Quantity = tagDatas.Count,
                     TagId = tagId,
                     PidList = tagDatas.Select(x => x.Pid).ToList()
                 };
@@ -907,7 +927,7 @@ namespace MSFC
                 //AddLog("Print\r\n");
                 PrintTag(_tagLabel);
 
-                //AddLog("Update DB\r\n");
+                AddLog($"[DEBUG] Start update database");
                 await db.TbScanOuts
                     .Where(x => _tagLabel.PidList.Contains(x.Pid))
                     .ExecuteUpdateAsync(s => s
@@ -915,19 +935,11 @@ namespace MSFC
                         .SetProperty(r => r.PrintAt, r => DateTime.Now)
                         .SetProperty(r => r.PrintDate, r => DateOnly.FromDateTime(DateTime.Now))
                     );
+                AddLog($"[DEBUG] Start reset all data");
 
-                // Xóa đúng các PID vừa in khỏi batch
-                lock (_pendingLock)
-                {
-                    foreach (var pid in _tagLabel.PidList)
-                        _pendingPids.Remove(pid);
-                }
-
-                // Reset biến/UI
-                _tagLabel = new ManufacturingTagDto();
-                _lastPidValue = string.Empty;
-                _lastStatusValue = string.Empty;
                 resetUI();
+
+                AddLog($"[DEBUG] Completed! Reset all data");
             }
             catch (Exception ex)
             {
@@ -945,24 +957,35 @@ namespace MSFC
 
         void PrintTag(ManufacturingTagDto tag)
         {
-            var doc = new PrintDocument();
-            doc.PrinterSettings = new PrinterSettings();
+            try
+            {
+                AddLog("PrintTag: Start printing tag.");
+                var doc = new PrintDocument();
+                doc.PrinterSettings = new PrinterSettings();
 
-            // lấy đúng size 50x25mm từ driver (197x98 hundredths-inch hoặc ngược)
-            var ps = doc.PrinterSettings.PaperSizes
-                .Cast<PaperSize>()
-                .FirstOrDefault(p => Math.Abs(p.Width - 197) < 5 && Math.Abs(p.Height - 98) < 5
-                                  || Math.Abs(p.Width - 98) < 5 && Math.Abs(p.Height - 197) < 5);
-            if (ps != null) doc.DefaultPageSettings.PaperSize = ps;
+                // lấy đúng size 50x25mm từ driver (197x98 hundredths-inch hoặc ngược)
+                var ps = doc.PrinterSettings.PaperSizes
+                    .Cast<PaperSize>()
+                    .FirstOrDefault(p => Math.Abs(p.Width - 197) < 5 && Math.Abs(p.Height - 98) < 5
+                                      || Math.Abs(p.Width - 98) < 5 && Math.Abs(p.Height - 197) < 5);
+                if (ps != null) doc.DefaultPageSettings.PaperSize = ps;
 
-            doc.DefaultPageSettings.Margins = new System.Drawing.Printing.Margins(0, 0, 0, 0);
-            doc.OriginAtMargins = true;              // (0,0) = MarginBounds.TopLeft
-            doc.DefaultPageSettings.Landscape = false; // nếu bị xoay hãy thử true
+                doc.DefaultPageSettings.Margins = new System.Drawing.Printing.Margins(0, 0, 0, 0);
+                doc.OriginAtMargins = true;              // (0,0) = MarginBounds.TopLeft
+                doc.DefaultPageSettings.Landscape = false; // nếu bị xoay hãy thử true
+                AddLog("PrintTag: Start generate label...");
+                _tagLabel = tag;
+                doc.PrintPage += GenerateLabel_FitMarginBounds;
 
-            _tagLabel = tag;
-            doc.PrintPage += GenerateLabel_FitMarginBounds;
-
-            doc.Print();
+                AddLog("PrintTag: Calling doc.Print()...");
+                doc.Print();
+                AddLog("PrintTag: Print completed.");
+            }
+            catch (Exception ex)
+            {
+                AddLog($"PrintTag: Exception - {ex.Message}\r\n{ex.StackTrace}");
+                throw;
+            }
         }
         void GenerateLabel_FitMarginBounds(object sender, PrintPageEventArgs e)
         {
@@ -1188,96 +1211,109 @@ namespace MSFC
 
         private async void cbtnConfirmSetting_CheckedChanged(object sender, EventArgs e)
         {
-
             if (_isSettingUp) return; // chống reentrancy
             _isSettingUp = true;
 
             try
             {
-                if (cbtnConfirmSetting.Checked)
+                // Đảm bảo luôn chạy khi app start hoặc khi người dùng click
+                bool needSetup = cbtnConfirmSetting.Checked || !_isWatching;
+
+                if (needSetup)
                 {
-                    // UI: trạng thái đang cài
                     lbDetailStatus.Text = "Instalando. Por favor espere....";
                     lbDetailStatus.ForeColor = Color.Yellow;
-
-                    // tắt input
                     txtInspector1.Enabled = false;
                     txtInspector2.Enabled = false;
                     txtSettingEBR.Enabled = false;
-                    cbtnConfirmSetting.Enabled = false; // chặn click lặp
+                    int maxRetry = 50;
+                    int delayMs = 200;
+                    bool attached = false, canConnect = false;
 
+                    string dbMsg = string.Empty;
+                    string SfcMsg = string.Empty;
+
+                    _inspector1 = Normalize(txtInspector1.Text);
+                    _inspector2 = Normalize(txtInspector2.Text);
+                    for (int attempt = 1; attempt <= maxRetry; attempt++)
+                    {
+                        // Check DB connection
+                        using var db = await _dbFactory.CreateDbContextAsync();
+                        canConnect = await db.Database.CanConnectAsync();
+                        if (!canConnect) {
+                            dbMsg = "No se pudo conectar a la base de datos.";
+                            AddLog($"============ Connect to DB fail ============");
+                            await Task.Delay(delayMs);
+                            continue;
+                        }
+                      
+
+                        // Check SFC attach
+                        try
+                        {
+                            _automationService2.AttachToProcess(_config2.ProcessName);
+                            attached = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            AddLog($"============ Retry {attempt}/{maxRetry} ============");
+                            AddLog(ex.ToString());
+                            await Task.Delay(delayMs);
+                            continue;
+                        }
+
+                        // If both connected & attached -> break    
+                        if (attached && canConnect)
+                        {
+                            dbMsg = "DB conectado!";
+                            SfcMsg = "Vinculado exitosamente con SFC (OK)";
+                        }
+                        break;
+
+                    }
+
+                  
+
+                    if (!attached || !canConnect)
+                    {
+                        lbDetailStatus.ForeColor = Color.Yellow;
+                        txtInspector1.Enabled = true;
+                        txtInspector2.Enabled = true;
+                        txtSettingEBR.Enabled = true;
+                        return;
+                    }
+
+                   
+                  
 
                     try
                     {
-                        _inspector1 = Normalize(txtInspector1.Text);
-                        _inspector2 = Normalize(txtInspector2.Text);
-
-                        // Kết nối DB (dispose đúng cách)
-                        using var db = await _dbFactory.CreateDbContextAsync();
-                        bool canConnect = await db.Database.CanConnectAsync();
-                        var test = canConnect ? "DB conectado!" : "Falló la conexión DB!";
-
-                        // Attach theo tên process (có thể ném exception -> rơi vào catch ngoài)
-                        _automationService2.AttachToProcess(_config2.ProcessName);
-
-                        await Task.Delay(300); // cho SFC ổn định 1 nhịp
-
-                        // Nếu không connect được DB hoặc attach thất bại (đã ném exception) -> dừng tại đây
-                        if (!canConnect)
-                        {
-                            lbDetailStatus.ForeColor = Color.Red;
-                            lbDetailStatus.Text = "No se pudo conectar a la base de datos.";
-                            // rollback trạng thái
-                            cbtnConfirmSetting.Checked = false;
-                            return;
-                        }
-
-                        lbDetailStatus.Text = $"Vinculado exitosamente con SFC (OK) | {test}";
-                        lbDetailStatus.ForeColor = (lbDetailStatus.Text.Contains("(OK)") && canConnect)
-                                                    ? Color.Lime
-                                                    : Color.Yellow;
-                        // Thao tác SFC & reset UI cục bộ
-                        try
-                        {
-                            // Clear lỗi trên SFC
-                            _automationService2.ClickTo(_config2.Controls.ClearButton);
-
-                            ResetRtxtDetailExplain();
-                            lbPID.Text = "-";
-
-                        }
-                        catch (Exception)
-                        {
-                            MessageBox.Show("No se puede enviar la operación, abra el software SFC.LGE");
-                            // Không khởi động watcher nếu clear thất bại
-                            cbtnConfirmSetting.Checked = false;
-                            return;
-                        }
-
-                        // Khởi động watcher nếu chưa chạy
-                        if (!_isWatching)
-                        {
-                            StartWatchingPidPollingTask(); // nếu có bản async -> await StartWatchingPidPollingTask();
-                            _isWatching = true;
-                        }
+                        resetUI(); // reset all to default
+                        lbDetailStatus.Text = $"{SfcMsg} | {dbMsg}";
+                        lbDetailStatus.ForeColor = Color.Lime;
                     }
                     catch (Exception ex)
                     {
-                        lbDetailStatus.ForeColor = Color.Red;
-                        lbDetailStatus.Text = $"Enlace directo al SFC: {ex.Message}";
-                        // rollback trạng thái khi lỗi
-                        cbtnConfirmSetting.Checked = false;
+                        AddLog(ex.Message);
+                        txtInspector1.Enabled = true;
+                        txtInspector2.Enabled = true;
+                        txtSettingEBR.Enabled = true;
                         return;
                     }
-                    finally
+
+                    if (!_isWatching)
                     {
-                        cbtnConfirmSetting.Enabled = true;
+                        StartWatchingPidPollingTask();
+                        _isWatching = true;
                     }
+
+                    txtInspector1.Enabled = false;
+                    txtInspector2.Enabled = false;
+                    txtSettingEBR.Enabled = false;
                 }
                 else
                 {
-                    txtSettingEBR.Clear();
-                    // Tắt watcher trước khi mở lại input
+                    resetUI(); // reset all to default
                     try
                     {
                         if (_isWatching)
@@ -1288,11 +1324,10 @@ namespace MSFC
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show($"Error: {ex.Message}");
+                       AddLog($"Error: {ex.Message}");
                     }
                     finally
                     {
-                        // mở input
                         txtInspector1.Enabled = true;
                         txtInspector2.Enabled = true;
                         txtSettingEBR.Enabled = true;
@@ -1304,7 +1339,6 @@ namespace MSFC
                 _isSettingUp = false;
             }
         }
-
 
 
 
@@ -1320,7 +1354,10 @@ namespace MSFC
             {
                 this.BeginInvoke(new Action(() =>
                 {
-                    rtxtDetailExplain.AppendText($"{msg}\r\n");
+                    //rtxtDetailExplain.AppendText($"{msg}\r\n");
+                    richTextBox1.AppendText($"{msg}\r\n");
+                    richTextBox1.SelectionStart = richTextBox1.TextLength;
+                    richTextBox1.ScrollToCaret();
                 }));
             }
         }
@@ -1506,12 +1543,161 @@ namespace MSFC
         //        }
         //    }
         //}
+
+        /// <summary>
+        /// Cải tiến lần 2
+        /// </summary>
+        /// <param name="maxTries"></param>
+        /// <param name="delayMs"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        //Stopwatch sw = new Stopwatch();
+        //private async Task LoopAsync(CancellationToken ct)
+        //{
+
+        //    var sw = Stopwatch.StartNew();
+        //    const int idleDelayMs = 100;
+        //    const int busyDelayMs = 50;
+
+        //    while (!ct.IsCancellationRequested)
+        //    {
+        //        try
+        //        {
+        //            if (_building)
+        //            {
+        //                await Task.Delay(busyDelayMs, ct).ConfigureAwait(false);
+        //                continue;
+        //            }
+        //            sw = Stopwatch.StartNew();
+
+        //            // === 1) ĐỌC SNAPSHOT 1 LẦN TRÊN UI THREAD ===
+        //            _building = true;
+        //            var data = await OnUiAsync(() =>
+        //            {
+        //                try
+        //                {
+        //                    string pid = Normalize(_automationService2.GetText(_config2.Controls.PID));
+        //                    string result = Normalize(_automationService2.GetText(_config2.Controls.ResultUc, _config2.Controls.ResultText));
+        //                    string ebr = Normalize(_automationService2.GetText(_config2.Controls.ModelSuffixUc, "txtText"));
+        //                    string wo = Normalize(_automationService2.GetText(_config2.Controls.WorkOrderUc, "txtText"));
+        //                    string msg = Normalize(_automationService2.GetInnerMessageFromResult(_config2.Controls.ResultUc, _config2.Controls.ResultText));
+        //                    string prog = Normalize(_automationService2.GetText(_config2.Controls.ResultQty));
+
+        //                    if (string.IsNullOrWhiteSpace(pid)) return null;
+
+        //                    return new PCB
+        //                    {
+        //                        PID = pid,
+        //                        Result = result,
+        //                        EBR = ebr,
+        //                        WO = wo,
+        //                        Message = msg,
+        //                        Progress = prog
+        //                    };
+        //                }
+        //                catch (Exception ex)
+        //                {
+        //                    AddLog("OnUi snapshot error: " + ex.Message);
+        //                    return null;
+        //                }
+        //            }).ConfigureAwait(false);
+        //            sw.Stop();
+        //            AddLog($"Read UI:{sw.ElapsedMilliseconds}");
+
+        //            if (data == null)
+        //            {
+        //                _building = false;
+        //                await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
+        //                continue;
+        //            }
+
+
+
+        //            // Dedup: nếu PID & Result (clean) trùng với lần trước → bỏ qua
+        //            var resClean = Normalize(data.Result);
+        //            if (string.Equals(data.PID, _lastPidValue, StringComparison.OrdinalIgnoreCase) &&
+        //                string.Equals(resClean, _lastStatusValue, StringComparison.OrdinalIgnoreCase))
+        //            {
+        //                _building = false;
+        //                await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
+        //                continue;
+        //            }
+        //             sw = Stopwatch.StartNew();
+
+        //            // === 2) DEBOUNCE/ỔN ĐỊNH TRẠNG THÁI RESULT ===
+        //            // Nếu chưa OK, chờ ngắn rồi đọc lại 1-2 lần để tránh miss khung READY→OK
+        //            if (Classify(resClean) != ResultKind.Ok)
+        //            {
+        //                var confirmed = await WaitStableOkAsync(maxTries: 2, delayMs: 60, ct);
+        //                if (confirmed != null)
+        //                {
+        //                    // cập nhật theo snapshot OK
+        //                    data.Result = confirmed.Result;
+        //                    data.Message = confirmed.Message;
+        //                    data.Progress = confirmed.Progress;
+        //                    resClean = Normalize(data.Result);
+        //                }
+        //            }
+        //            sw.Stop();
+        //            AddLog($"WaitStableOkAsync:{sw.ElapsedMilliseconds}");
+
+        //            // === 3) CẬP NHẬT UI ===
+        //             sw = Stopwatch.StartNew();
+        //            await OnUiAsync(() =>
+        //            {
+        //                UpdateUI(data);
+        //                return 0;
+        //            }).ConfigureAwait(false);
+        //            sw.Stop();
+        //            AddLog($"UpdateUI:{sw.ElapsedMilliseconds}");
+
+        //            // Cập nhật mốc dedup bằng GIÁ TRỊ ĐÃ CLEAN (nhất quán với Classify)
+        //            _lastPidValue = data.PID;
+        //            _lastStatusValue = resClean;
+        //             sw = Stopwatch.StartNew();
+        //            // === 4) UPLOAD DB KHI OK (sau khi đã debounce) ===
+        //            if (Classify(resClean) == ResultKind.Ok)
+        //            {
+        //                try
+        //                {
+        //                    // snapshot tối thiểu cho DB
+        //                    var snap = new PCB
+        //                    {
+        //                        PID = data.PID,
+        //                        EBR = data.EBR,
+        //                        WO = data.WO,
+        //                        Result = data.Result,
+        //                        Message = data.Message,
+        //                        Progress = data.Progress
+        //                    };
+        //                    await UploadToDb(snap, ct).ConfigureAwait(false);
+        //                }
+        //                catch (OperationCanceledException) { }
+        //                catch (Exception ex)
+        //                {
+        //                    AddLog("UploadToDb error: " + ex.Message);
+        //                }
+        //            }
+        //            sw.Stop();
+        //            AddLog($"UploadToDb:{sw.ElapsedMilliseconds}");
+
+        //            _building = false;
+        //        }
+        //        catch (OperationCanceledException) { break; }
+        //        catch (Exception ex)
+        //        {
+        //            AddLog("Loop error: " + ex);
+        //            _building = false;
+        //            await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
+        //        }
+        //    }
+        //}
+
+
         private async Task LoopAsync(CancellationToken ct)
         {
-
-            var sw = Stopwatch.StartNew();
             const int idleDelayMs = 100;
-            const int busyDelayMs = 50;
+            const int busyDelayMs = 40; // nhạy hơn chút
 
             while (!ct.IsCancellationRequested)
             {
@@ -1522,112 +1708,156 @@ namespace MSFC
                         await Task.Delay(busyDelayMs, ct).ConfigureAwait(false);
                         continue;
                     }
-                    AddLog($"1:{sw.ElapsedMilliseconds}ms");
 
-                    // === 1) ĐỌC SNAPSHOT 1 LẦN TRÊN UI THREAD ===
                     _building = true;
-                    var data = await OnUiAsync(() =>
+
+                    // ===== 1A) HEAD: PID + RESULT =====
+                    var head = await _uiaWorker.Run(() =>
                     {
-                        try
-                        {
-                            string pid = Normalize(_automationService2.GetText(_config2.Controls.PID));
-                            string result = Normalize(_automationService2.GetText(_config2.Controls.ResultUc, _config2.Controls.ResultText));
-                            string ebr = Normalize(_automationService2.GetText(_config2.Controls.ModelSuffixUc, "txtText"));
-                            string wo = Normalize(_automationService2.GetText(_config2.Controls.WorkOrderUc, "txtText"));
-                            string msg = Normalize(_automationService2.GetInnerMessageFromResult(_config2.Controls.ResultUc, _config2.Controls.ResultText));
-                            string prog = Normalize(_automationService2.GetText(_config2.Controls.ResultQty));
+                        EnsureHandles();
 
-                            if (string.IsNullOrWhiteSpace(pid)) return null;
+                        var inner = new System.Text.StringBuilder();
 
-                            return new PCB
-                            {
-                                PID = pid,
-                                Result = result,
-                                EBR = ebr,
-                                WO = wo,
-                                Message = msg,
-                                Progress = prog
-                            };
-                        }
-                        catch (Exception ex)
+                        string pid = Normalize(_automationService2.SafeGetText(_pidEl));
+
+                        string result = Normalize(_automationService2.SafeGetText(_resultEl));
+
+                        // nếu null/empty bất thường -> thử refresh handle 1 lần
+                        if (string.IsNullOrEmpty(pid) && string.IsNullOrEmpty(result))
                         {
-                            AddLog("OnUi snapshot error: " + ex.Message);
-                            return null;
+                            InvalidateHandlesIfNulls();
+                            pid = Normalize(_automationService2.SafeGetText(_pidEl));
+                            result = Normalize(_automationService2.SafeGetText(_resultEl));
+                            inner.Append("[refreshed] ");
                         }
+
+                        return (pid, result);
                     }).ConfigureAwait(false);
-                    AddLog($"2:{sw.ElapsedMilliseconds}ms");
-                    if (data == null)
+
+                    //// retry siêu ngắn nếu bị spike
+                    //if (sw.ElapsedMilliseconds > 120)
+                    //{
+                    //    var swRetry = Stopwatch.StartNew();
+                    //    head = await _uiaWorker.Run(() =>
+                    //    {
+                    //        string pid2 = Normalize(_automationService2.SafeGetText(_pidEl));
+                    //        string result2 = Normalize(_automationService2.SafeGetText(_resultEl));
+                    //        return (pid2, result2);
+                    //    });
+                    //    swRetry.Stop();
+                    //    AddLog($"Read UI (head) RETRY:{swRetry.ElapsedMilliseconds}");
+                    //}
+
+
+
+                    if (string.IsNullOrWhiteSpace(head.pid))
                     {
                         _building = false;
                         await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
                         continue;
                     }
-                    AddLog($"3:{sw.ElapsedMilliseconds}ms");
 
-                    // Dedup: nếu PID & Result (clean) trùng với lần trước → bỏ qua
-                    var resClean = Normalize(data.Result);
-                    if (string.Equals(data.PID, _lastPidValue, StringComparison.OrdinalIgnoreCase) &&
+                    // Dedup sớm
+                    var resClean = Normalize(head.result);
+                    if (string.Equals(head.pid, _lastPidValue, StringComparison.OrdinalIgnoreCase) &&
                         string.Equals(resClean, _lastStatusValue, StringComparison.OrdinalIgnoreCase))
                     {
                         _building = false;
                         await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
                         continue;
                     }
-                    AddLog($"4:{sw.ElapsedMilliseconds}ms");
-                    // === 2) DEBOUNCE/ỔN ĐỊNH TRẠNG THÁI RESULT ===
-                    // Nếu chưa OK, chờ ngắn rồi đọc lại 1-2 lần để tránh miss khung READY→OK
+
+                    // ===================== 2) DEBOUNCE NHẸ (nếu chưa OK) =====================
                     if (Classify(resClean) != ResultKind.Ok)
                     {
-                        var confirmed = await WaitStableOkAsync(maxTries: 3, delayMs: 80, ct);
+                        var confirmed = await WaitStableOkAsync(maxTries: 2, delayMs: 60, ct);
                         if (confirmed != null)
                         {
-                            // cập nhật data theo snapshot OK
-                            data.Result = confirmed.Result;
-                            data.Message = confirmed.Message;
-                            data.Progress = confirmed.Progress;
-                            resClean = Normalize(data.Result);
+                            // cập nhật theo snapshot OK
+                            resClean = Normalize(confirmed.Result);
+                            head = (head.pid, resClean);
                         }
                     }
-                    AddLog($"5:{sw.ElapsedMilliseconds}ms");
-                    // === 3) CẬP NHẬT UI ===
-                    await OnUiAsync(() =>
-                    {
-                        UpdateUI(data);
-                        return 0;
-                    }).ConfigureAwait(false);
-                    AddLog($"6:{sw.ElapsedMilliseconds}ms");
-                    // Cập nhật mốc dedup bằng GIÁ TRỊ ĐÃ CLEAN (nhất quán với Classify)
-                    _lastPidValue = data.PID;
-                    _lastStatusValue = resClean;
 
-                    // === 4) UPLOAD DB KHI OK (sau khi đã debounce) ===
+                    // ===================== 1B) ĐỌC SÂU KHI CẦN =====================
+                    // Chỉ đọc EBR/WO/Progress… khi đã chắc chắn có thay đổi PID/Result.
+                    // ===================== 1B) ĐỌC SÂU KHI CẦN =====================
+                    var tail = await _uiaWorker.Run(() =>
+                    {
+                        var inner = new System.Text.StringBuilder();
+
+                        string ebr = Normalize(_automationService2.GetText(_config2.Controls.ModelSuffixUc, "txtText"));
+
+                        string wo = Normalize(_automationService2.GetText(_config2.Controls.WorkOrderUc, "txtText"));
+
+                        string prog = Normalize(_automationService2.GetText(_config2.Controls.ResultQty));
+
+                        string msg = null;
+                        if (Classify(resClean) == ResultKind.Ng)
+                        {
+                            msg = Normalize(_automationService2.GetInnerMessageFromResult(_config2.Controls.ResultUc, _config2.Controls.ResultText));
+                        }
+
+                        return (ebr, wo, prog, msg);
+                    }).ConfigureAwait(false);
+
+
+                    var data = new PCB
+                    {
+                        PID = head.pid,
+                        Result = resClean,
+                        EBR = tail.ebr,
+                        WO = tail.wo,
+                        Message = tail.msg,
+                        Progress = tail.prog
+                    };
+
+                    // ===================== 3) CẬP NHẬT UI (chỉ khi khác) =====================
+                    if (!UiStateEquals(_lastUi, data))
+                    {
+                        var swUpdate = Stopwatch.StartNew();
+                        await OnUiAsync(() => { UpdateUI(data); return 0; }).ConfigureAwait(false);
+                        swUpdate.Stop();
+                        _lastUi = data;
+                    }
+
+
+                    // Ghi mốc dedup
+                    _lastPidValue = data.PID;
+                    _lastStatusValue = data.Result;
+
+                    // ===================== 4) GHI DB – CHẠY NỀN =====================
                     if (Classify(resClean) == ResultKind.Ok)
                     {
-                        try
+                        var snap = new PCB
                         {
-                            // snapshot tối thiểu cho DB
-                            var snap = new PCB
-                            {
-                                PID = data.PID,
-                                EBR = data.EBR,
-                                WO = data.WO,
-                                Result = data.Result,
-                                Message = data.Message,
-                                Progress = data.Progress
-                            };
-                            await UploadToDb(snap, ct).ConfigureAwait(false);
-                        }
-                        catch (OperationCanceledException) { }
-                        catch (Exception ex)
-                        {
-                            AddLog("UploadToDb error: " + ex.Message);
-                        }
-                    }
+                            PID = data.PID,
+                            EBR = data.EBR,
+                            WO = data.WO,
+                            Result = data.Result,
+                            Message = data.Message,
+                            Progress = data.Progress
+                        };
 
+                        //// Cách cũ không có track số lượng upload đang chạy
+                        //_ = Task.Factory.StartNew(async () =>
+                        //{
+                        //    try { await UploadToDb(snap, ct).ConfigureAwait(false); }
+                        //    catch (Exception ex) { AddLog("UploadToDb error: " + ex.Message); }
+                        //    finally { }
+                        //}, ct, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+                        // Cách mới có track số lượng upload đang chạy + tránh trùng PID
+
+                        _uploadSvc.Enqueue(snap); // fire-and-forget, chạy nền
+
+                    }
                     _building = false;
-                    AddLog($"7:{sw.ElapsedMilliseconds}ms");
                 }
-                catch (OperationCanceledException) { break; }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
                 catch (Exception ex)
                 {
                     AddLog("Loop error: " + ex);
@@ -1636,6 +1866,20 @@ namespace MSFC
                 }
             }
         }
+
+        // ===================== Helper nhỏ (nếu bạn cần) =====================
+        private bool UiStateEquals(PCB a, PCB b)
+        {
+            if (a == null || b == null) return false;
+            return string.Equals(a.PID, b.PID, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(a.Result, b.Result, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(a.EBR, b.EBR, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(a.WO, b.WO, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(a.Message, b.Message, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(a.Progress, b.Progress, StringComparison.OrdinalIgnoreCase);
+        }
+
+
         private async Task<PCB?> WaitStableOkAsync(int maxTries, int delayMs, CancellationToken ct)
         {
             for (int i = 0; i < maxTries; i++)
@@ -1691,7 +1935,6 @@ namespace MSFC
             return cleaned.ToUpperInvariant();
         }
 
-        string Inspect(string s) => s == null ? "(null)" : string.Join(", ", s.Select(c => $"U+{(int)c:X04}"));
         private Task<T> OnUiAsync<T>(Func<T> func)
         {
             var tcs = new TaskCompletionSource<T>();
@@ -1720,7 +1963,11 @@ namespace MSFC
         protected override async void OnFormClosing(FormClosingEventArgs e)
         {
             await StopWatchingPidAsync();
+
+            if (_uploadSvc != null)
+                await _uploadSvc.DisposeAsync();
             base.OnFormClosing(e);
+
         }
 
 
@@ -1772,5 +2019,204 @@ namespace MSFC
                                         ? Color.Lime
                                         : Color.Yellow;
         }
+
+        private void SetAutoStart(bool enable)
+        {
+            try
+            {
+                string appName = System.Windows.Forms.Application.ProductName;
+                string exePath = System.Windows.Forms.Application.ExecutablePath;
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (enable)
+                    {
+                        key.SetValue(appName, exePath);
+                        AddLog("Added to auto start");
+                    }
+
+                    else
+                        key.DeleteValue(appName, false);
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("SetAutoStart error: " + ex.Message);
+            }
+        }
     }
+    // 1) Helper: STA worker (một thread STA có queue)
+    public sealed class StaWorker : IDisposable
+    {
+        private readonly System.Collections.Concurrent.BlockingCollection<Action> _q
+            = new System.Collections.Concurrent.BlockingCollection<Action>();
+        private readonly Thread _thread;
+
+        public StaWorker(string name = "UIA-STA")
+        {
+            _thread = new Thread(() =>
+            {
+                // STA + message loop không bắt buộc, nhưng nên có
+                System.Windows.Forms.Application.Idle += (_, __) => { };
+                foreach (var act in _q.GetConsumingEnumerable())
+                {
+                    try { act(); } catch { /* swallow để không kill thread */ }
+                }
+            })
+            {
+                IsBackground = true,
+                Name = name
+            };
+            _thread.SetApartmentState(ApartmentState.STA);
+            _thread.Start();
+        }
+
+        public Task Run(Action action)
+        {
+            var tcs = new TaskCompletionSource<object?>();
+            _q.Add(() =>
+            {
+                try { action(); tcs.SetResult(null); }
+                catch (Exception ex) { tcs.SetException(ex); }
+            });
+            return tcs.Task;
+        }
+
+        public Task<T> Run<T>(Func<T> func)
+        {
+            var tcs = new TaskCompletionSource<T>();
+            _q.Add(() =>
+            {
+                try { tcs.SetResult(func()); }
+                catch (Exception ex) { tcs.SetException(ex); }
+            });
+            return tcs.Task;
+        }
+
+        public void Dispose() => _q.CompleteAdding();
+    }
+
+    /// <summary>
+    /// Chạy UploadToDb ở background (không chặn UI), theo dõi trạng thái để caller
+    /// có thể kiểm tra/đợi rồi *tự gọi* PrintTag() khi sẵn sàng.
+    /// </summary>
+    public sealed class UploadBackgroundService : IAsyncDisposable
+    {
+        private readonly Channel<PCB> _queue;
+        private readonly Func<PCB, CancellationToken, Task> _uploadFunc;
+        private readonly ConcurrentDictionary<string, Task> _tasksByPid = new();
+        private readonly SemaphoreSlim _parallelLimiter;
+        private readonly CancellationTokenSource _cts = new();
+        private readonly List<Task> _workers = new();
+        private int _inFlight;
+
+        /// <param name="uploadFunc">Hàm thực hiện upload (không chạm UI)</param>
+        /// <param name="maxDegreeOfParallelism">Số upload chạy song song (mặc định 2)</param>
+        public UploadBackgroundService(Func<PCB, CancellationToken, Task> uploadFunc, int maxDegreeOfParallelism = 2)
+        {
+            _uploadFunc = uploadFunc ?? throw new ArgumentNullException(nameof(uploadFunc));
+            _queue = Channel.CreateUnbounded<PCB>(new UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
+            _parallelLimiter = new SemaphoreSlim(Math.Max(1, maxDegreeOfParallelism), Math.Max(1, maxDegreeOfParallelism));
+
+            // tạo các worker đọc hàng đợi
+            for (int i = 0; i < maxDegreeOfParallelism; i++)
+            {
+                _workers.Add(Task.Run(WorkerLoopAsync));
+            }
+        }
+
+        public bool Enqueue(PCB snap)
+        {
+            if (snap == null || string.IsNullOrWhiteSpace(snap.PID)) return false;
+            return _queue.Writer.TryWrite(snap);
+        }
+
+        public async Task EnqueueAsync(PCB snap, CancellationToken ct = default)
+        {
+            if (snap == null || string.IsNullOrWhiteSpace(snap.PID)) return;
+            await _queue.Writer.WriteAsync(snap, ct).ConfigureAwait(false);
+        }
+
+        /// <summary> Có bất kỳ upload nào đang chạy không? </summary>
+        public bool IsAnyRunning() => Volatile.Read(ref _inFlight) > 0;
+
+        /// <summary> Upload của PID này còn đang chạy không? </summary>
+        public bool IsRunning(string pid)
+            => !string.IsNullOrWhiteSpace(pid) &&
+               _tasksByPid.TryGetValue(pid, out var t) &&
+               t is { IsCompleted: false };
+
+        /// <summary> Đợi upload của PID này xong (optional: timeout). </summary>
+        public async Task WaitForPidAsync(string pid, TimeSpan? timeout = null, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(pid)) return;
+            if (_tasksByPid.TryGetValue(pid, out var t))
+            {
+                if (timeout is { } to && to > TimeSpan.Zero)
+                    await Task.WhenAny(t, Task.Delay(to, ct)).ConfigureAwait(false);
+                else
+                    await t.ConfigureAwait(false);
+            }
+        }
+
+        /// <summary> Đợi đến khi không còn upload nào đang chạy. </summary>
+        public async Task WaitAllIdleAsync(CancellationToken ct = default)
+        {
+            // snapshot tránh race
+            var running = _tasksByPid.Values.Where(x => !x.IsCompleted).ToArray();
+            if (running.Length > 0)
+                await Task.WhenAll(running).ConfigureAwait(false);
+        }
+
+        private async Task WorkerLoopAsync()
+        {
+            try
+            {
+                await foreach (var snap in _queue.Reader.ReadAllAsync(_cts.Token))
+                {
+                    await _parallelLimiter.WaitAsync(_cts.Token).ConfigureAwait(false);
+
+                    // mỗi item xử lý trong 1 task để worker lấy tiếp item khác
+                    _ = Task.Run(async () =>
+                    {
+                        Interlocked.Increment(ref _inFlight);
+                        var pid = snap.PID!;
+                        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        _tasksByPid[pid] = tcs.Task;
+
+                        try
+                        {
+                            await _uploadFunc(snap, _cts.Token).ConfigureAwait(false);
+                            tcs.TrySetResult(null); // đánh dấu xong pid này
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            tcs.TrySetCanceled();
+                        }
+                        catch (Exception ex)
+                        {
+                            tcs.TrySetException(ex);
+                        }
+                        finally
+                        {
+                            _tasksByPid.TryRemove(pid, out _);
+                            Interlocked.Decrement(ref _inFlight);
+                            _parallelLimiter.Release();
+                        }
+                    }, _cts.Token);
+                }
+            }
+            catch (OperationCanceledException) { /* normal on dispose */ }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _queue.Writer.TryComplete();
+            _cts.Cancel();
+            try { await Task.WhenAll(_workers).ConfigureAwait(false); } catch { }
+            _parallelLimiter.Dispose();
+            _cts.Dispose();
+        }
+    }
+
 }

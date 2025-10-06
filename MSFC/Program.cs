@@ -55,25 +55,23 @@ namespace MSFC
                         services.Configure<AutomationConfig2>(configuration.GetSection("AutomationConfig2"));
                         services.Configure<TranslationConfig>(configuration.GetSection("TranslationConfig"));
 
-                        //var conn = configuration.GetConnectionString("DefaultConnection");
-                        //var serverVersion = new MySqlServerVersion(new Version(9, 1, 0)); // chỉnh đúng
-                        //services.AddDbContextFactory<MMesDbContext>(o => o.UseMySql(conn, serverVersion));
+                        var conn = configuration.GetConnectionString("DefaultConnection");
+                        var serverVersion = new MySqlServerVersion(new Version(9, 1, 0)); // chỉnh đúng
+                        services.AddDbContextFactory<MMesDbContext>(o => o.UseMySql(conn, serverVersion));
 
-                        var conn = configuration.GetConnectionString("LocalConnection");
-
-                        services.AddDbContextFactory<MMesDbContext>(options =>
-                        {
-                            options.UseMySql(conn, ServerVersion.AutoDetect(conn),
-                                mySqlOptions =>
-                                {
-                                    // tuỳ chọn hữu ích:
-                                    mySqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(5), null);
-                                });
-
-                            // Bật log để thấy lỗi chi tiết
-                            options.EnableSensitiveDataLogging();   // chỉ bật ở dev!
-                            options.EnableDetailedErrors();
-                        });
+                        //var conn = configuration.GetConnectionString("LocalConnection");
+                        //services.AddDbContextFactory<MMesDbContext>(options =>
+                        //{
+                        //    options.UseMySql(conn, ServerVersion.AutoDetect(conn),
+                        //        mySqlOptions =>
+                        //        {
+                        //            // tuỳ chọn hữu ích:
+                        //            mySqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(5), null);
+                        //        });
+                        //    // Bật log để thấy lỗi chi tiết
+                        //    options.EnableSensitiveDataLogging();   // chỉ bật ở dev!
+                        //    options.EnableDetailedErrors();
+                        //});
 
 
                         services.AddSingleton<ILoggingService, LoggingService>();

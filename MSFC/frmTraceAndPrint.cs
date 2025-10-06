@@ -479,19 +479,18 @@ namespace MSFC
                 //                && batchPids.Contains(x.Pid))
                 //    .ToListAsync();
                 var tagDatas = await (
-                 from s in db.TbScanOuts
-                 join m in db.TbModelDicts on s.PartNo equals m.PartNo
-                 where m.PartNo == _SettingEBR
-                       && !s.TagId.HasValue
-                       && batchPids.Contains(s.Pid)
-                 select new
-                 {
-                     PartNo = m.PartNo,
-                     ModelName = m.ModelName,
-                     Board = m.Board,
-                     Pid = s.Pid
-                 }
-            ).ToListAsync();
+                     from s in db.TbScanOuts
+                     join m in db.TbModelDicts on s.PartNo equals m.PartNo into gj
+                     from m in gj.DefaultIfEmpty()     // <-- left join
+                     where batchPids.Contains(s.Pid)
+                     select new
+                     {
+                         PartNo = m != null ? m.PartNo : null,   // có thể null nếu không match
+                         ModelName = m != null ? m.ModelName : null,
+                         Board = m != null ? m.Board : null,
+                         Pid = s.Pid
+                     }
+                 ).ToListAsync();
                 if (tagDatas.Count == 0)
                 {
                     ShowNotice("No se encontraron PIDs válidos en el lote actual.", false);

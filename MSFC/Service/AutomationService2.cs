@@ -1,11 +1,332 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
+﻿//using FlaUI.Core;
+//using FlaUI.Core.AutomationElements;
+//using FlaUI.Core.Definitions;
+//using FlaUI.UIA3;
+//using FlaUI.UIA3.Identifiers;
+//using System;
+//using System.Collections.Generic;
+//using System.Diagnostics;
+//using System.Linq;
+//using Application = FlaUI.Core.Application;
+
+//namespace MSFC.Service
+//{
+//    /// <summary>
+//    /// Interface định nghĩa các chức năng cơ bản của AutomationService2
+//    /// (giữ nguyên chữ ký cũ để không phá tương thích)
+//    /// </summary>
+//    public interface IAutomationService2 : IDisposable
+//    {
+//        void AttachToProcess(int processId);
+//        void AttachToProcess(string processName);
+
+//        IReadOnlyList<AutomationElement> ScanApp();
+
+//        AutomationElement GetControlById(string automationId);
+//        AutomationElement GetChildControl(string parentAutomationId, string childAutomationId);
+
+//        void ClickTo(string automationId);
+//        void SetText(string automationId, string text);
+//        string GetText(string automationId);
+//        string GetText(string parentAutomationId, string childAutomationId, int index = 0); // overload mới
+
+//        string SafeGetText(AutomationElement el);
+
+//        string GetInnerMessageFromResult(string resultUcId, string resultTextId, bool pickLastNonEmpty = true);
+//    }
+
+//    /// <summary>
+//    /// Triển khai IAutomationService2 sử dụng FlaUI 5.x (UIA3)
+//    /// </summary>
+//    public class AutomationService2 : IAutomationService2
+//    {
+//        private AutomationBase _automation;
+//        private Application _app;
+//        private Window _mainWindow;
+
+//        private IReadOnlyList<AutomationElement> _cachedNodes;
+//        private readonly List<IDisposable> _eventHandlers = new();
+
+//        // Cache theo AutomationId để xử lý duplicate
+//        private Dictionary<string, List<AutomationElement>> _elementsById;
+
+//        // ====== Attach / Scan / Cache =========================================================
+
+//        public void AttachToProcess(int processId)
+//        {
+//            // Dispose tài nguyên cũ
+//            _automation?.Dispose();
+//            _app?.Dispose();
+
+//            _automation = new UIA3Automation();
+//            _app = Application.Attach(processId);
+//            _mainWindow = _app.GetMainWindow(_automation)
+//                ?? throw new InvalidOperationException("Cannot get main window of process.");
+
+//            CacheAllNodes();
+//        }
+
+//        public void AttachToProcess(string processName)
+//        {
+//            var process = Process.GetProcessesByName(processName).FirstOrDefault()
+//                ?? throw new InvalidOperationException($"Process '{processName}' not found.");
+//            AttachToProcess(process.Id);
+//        }
+
+//        private void CacheAllNodes()
+//        {
+//            if (_mainWindow == null)
+//            {
+//                _cachedNodes = Array.Empty<AutomationElement>();
+//                _elementsById = new Dictionary<string, List<AutomationElement>>(StringComparer.Ordinal);
+//                return;
+//            }
+
+//            _cachedNodes = _mainWindow.FindAllDescendants();
+
+//            _elementsById = _cachedNodes
+//                .Where(e => !string.IsNullOrWhiteSpace(e.AutomationId))
+//                .GroupBy(e => e.AutomationId, StringComparer.Ordinal)
+//                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+//        }
+
+
+
+//        public void RefreshCache() => CacheAllNodes();
+
+//        public IReadOnlyList<AutomationElement> ScanApp()
+//            => _mainWindow == null ? Array.Empty<AutomationElement>() : _mainWindow.FindAllDescendants();
+
+//        // ====== Tìm kiếm Control =============================================================
+
+//        /// <summary>Trả về control đầu tiên khớp AutomationId (nếu duplicate sẽ lấy phần tử đầu tiên)</summary>
+//        public AutomationElement GetControlById(string automationId)
+//        {
+//            if (string.IsNullOrWhiteSpace(automationId) || _elementsById == null) return null;
+//            return _elementsById.TryGetValue(automationId, out var list) ? list.FirstOrDefault() : null;
+//        }
+
+//        /// <summary>Trả về tất cả control khớp AutomationId (xử lý duplicate)</summary>
+//        public IReadOnlyList<AutomationElement> GetControlsById(string automationId)
+//        {
+//            if (string.IsNullOrWhiteSpace(automationId) || _elementsById == null) return Array.Empty<AutomationElement>();
+//            return _elementsById.TryGetValue(automationId, out var list) ? list : Array.Empty<AutomationElement>();
+//        }
+
+//        /// <summary>Lấy control thứ N theo AutomationId (0-based). Trả null nếu vượt phạm vi.</summary>
+//        public AutomationElement GetNthById(string automationId, int index)
+//        {
+//            var list = GetControlsById(automationId);
+//            return (index >= 0 && index < list.Count) ? list[index] : null;
+//        }
+
+//        /// <summary>
+//        /// Lấy control con theo (parentAutomationId, childAutomationId).
+//        /// Nếu có nhiều parent cùng Id, sẽ trả về match đầu tiên tìm thấy trong từng parent theo thứ tự.
+//        /// </summary>
+//        public AutomationElement GetChildControl(string parentAutomationId, string childAutomationId)
+//            => GetChildControl(parentAutomationId, childAutomationId, 0);
+
+//        /// <summary>Overload: lấy control con theo index trong phạm vi parent.</summary>
+//        public AutomationElement GetChildControl(string parentAutomationId, string childAutomationId, int index)
+//        {
+//            if (string.IsNullOrWhiteSpace(parentAutomationId) || string.IsNullOrWhiteSpace(childAutomationId))
+//                return null;
+
+//            var parents = GetControlsById(parentAutomationId);
+//            if (parents.Count == 0) return null;
+
+//            foreach (var parent in parents)
+//            {
+//                var matches = parent.FindAllDescendants(cf => cf.ByAutomationId(childAutomationId));
+//                if (matches != null && matches.Length > index)
+//                    return matches[index];
+//            }
+//            return null;
+//        }
+
+//        /// <summary>
+//        /// Tìm control theo "đường dẫn" nhiều cấp: ví dụ ("ucA", "ucB", "txtText")
+//        /// → tìm tất cả "ucA", trong đó tìm "ucB", rồi trong đó tìm "txtText".
+//        /// </summary>
+//        public AutomationElement GetControlByPath(params string[] automationIds)
+//        {
+//            if (automationIds == null || automationIds.Length == 0) return null;
+
+//            var currentLevel = GetControlsById(automationIds[0]).ToList();
+//            if (currentLevel.Count == 0) return null;
+
+//            for (int i = 1; i < automationIds.Length; i++)
+//            {
+//                string id = automationIds[i];
+//                var nextLevel = new List<AutomationElement>();
+//                foreach (var parent in currentLevel)
+//                {
+//                    var found = parent.FindAllDescendants(cf => cf.ByAutomationId(id));
+//                    if (found != null && found.Length > 0) nextLevel.AddRange(found);
+//                }
+//                if (nextLevel.Count == 0) return null;
+//                currentLevel = nextLevel;
+//            }
+
+//            return currentLevel.FirstOrDefault();
+//        }
+
+//         /// <summary>
+//         /// ====== Actions ======================================================================
+//         /// </summary>
+//         /// <param name="automationId"></param>
+
+//        public void ClickTo(string automationId)
+//        {
+//            var control = GetControlById(automationId);
+//            control?.AsButton()?.Invoke();
+//        }
+
+//        public void SetText(string automationId, string text)
+//        {
+//            var control = GetControlById(automationId);
+//            control?.AsTextBox()?.Enter(text ?? string.Empty);
+//        }
+
+//        /// <summary>Overload: SetText theo (parent, child, index)</summary>
+//        public void SetText(string parentAutomationId, string childAutomationId, string text, int index = 0)
+//        {
+//            var el = GetChildControl(parentAutomationId, childAutomationId, index);
+//            el?.AsTextBox()?.Enter(text ?? string.Empty);
+//        }
+
+//        // ====== Đọc Text =====================================================================
+
+//        /// <summary>
+//        /// GetText theo AutomationId (giữ tương thích). Dùng SafeGetText bên trong.
+//        /// </summary>
+//        public string GetText(string automationId)
+//        {
+//            var control = GetControlById(automationId);
+//            return SafeGetText(control);
+//        }
+
+//        /// <summary>Overload: GetText theo (parent, child, index)</summary>
+//        public string GetText(string parentAutomationId, string childAutomationId, int index = 0)
+//        {
+//            var el = GetChildControl(parentAutomationId, childAutomationId, index);
+//            return SafeGetText(el);
+//        }
+
+//        /// <summary>
+//        /// Đọc text linh hoạt theo ControlType/Pattern:
+//        /// - Edit/TextBox: ValuePattern.Value
+//        /// - Text/TextBlock/Label: Name
+//        /// - Document/RichText: TextPattern
+//        /// - LegacyIAccessible: Value/Name
+//        /// - Fallback: Name hoặc tìm Text child
+//        /// </summary>
+//        public string SafeGetText(AutomationElement el)
+//        {
+//            if (el == null) return null;
+
+//            try
+//            {
+//                // TextBox/Edit
+//                if (el.ControlType == ControlType.Edit && el.Patterns.Value.IsSupported)
+//                    return el.Patterns.Value.Pattern.Value ?? string.Empty;
+
+//                // Control khác nhưng hỗ trợ ValuePattern (ví dụ ComboBox editable)
+//                if (el.Patterns.Value.IsSupported)
+//                    return el.Patterns.Value.Pattern.Value ?? string.Empty;
+
+//                // Document / RichText
+//                if (el.Patterns.Text.IsSupported)
+//                {
+//                    var t = el.Patterns.Text.Pattern.DocumentRange.GetText(int.MaxValue);
+//                    return t?.TrimEnd('\r', '\n') ?? string.Empty;
+//                }
+
+//                // WPF TextBlock / Label
+//                if (el.ControlType == ControlType.Text && !string.IsNullOrEmpty(el.Name))
+//                    return el.Name;
+
+//                // Legacy
+//                if (el.Patterns.LegacyIAccessible.IsSupported)
+//                {
+//                    var lp = el.Patterns.LegacyIAccessible.Pattern;
+//                    if (!string.IsNullOrEmpty(lp.Value)) return lp.Value;
+//                    if (!string.IsNullOrEmpty(lp.Name)) return lp.Name;
+//                }
+
+//                // Fallback Name
+//                if (!string.IsNullOrEmpty(el.Name)) return el.Name;
+
+//                // Tìm text con
+//                var txt = el.FindFirstDescendant(cf => cf.ByControlType(ControlType.Text));
+//                if (txt != null && !string.IsNullOrEmpty(txt.Name)) return txt.Name;
+
+//                return string.Empty;
+//            }
+//            catch (Exception ex)
+//            {
+//                Console.WriteLine($"SafeGetText error: {ex}");
+//                return null;
+//            }
+//        }
+
+//        public string GetInnerMessageFromResult(string resultUcId, string resultTextId, bool pickLastNonEmpty = true)
+//        {
+//            var uc = GetControlById(resultUcId);
+//            if (uc == null) return null;
+
+//            // Tất cả TextBlock (ControlType.Text) bên trong ucResult
+//            var texts = uc.FindAllDescendants(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.Text));
+//            if (texts == null || texts.Length == 0) return null;
+
+//            // Lọc: bỏ chính txtResult (cái hiển thị OK/NG) và bỏ rỗng
+//            var filtered = texts
+//                .Where(t => !string.Equals(t.AutomationId, resultTextId, StringComparison.Ordinal))
+//                .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+//                .ToList();
+
+//            if (filtered.Count == 0) return null;
+
+//            // Thường message là TextBlock “sâu/đằng sau” → chọn cái cuối
+//            var chosen = pickLastNonEmpty ? filtered.Last() : filtered.First();
+//            return chosen.Name.Trim();
+//        }
+
+
+//         /// <summary>
+//         /// ====== Dispose ======================================================================
+//         /// </summary>
+
+//        public void Dispose()
+//        {
+//            foreach (var h in _eventHandlers)
+//                h.Dispose();
+//            _eventHandlers.Clear();
+
+//            _automation?.Dispose();
+//            _automation = null;
+
+//            _app?.Dispose();
+//            _app = null;
+
+//            _cachedNodes = Array.Empty<AutomationElement>();
+//            _elementsById = null;
+//            _mainWindow = null;
+//        }
+//    }
+//}
+
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
+using FlaUI.Core.Input;
+using FlaUI.Core.Tools;
 using FlaUI.UIA3;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using Application = FlaUI.Core.Application;
 
 namespace MSFC.Service
@@ -23,39 +344,48 @@ namespace MSFC.Service
 
         AutomationElement GetControlById(string automationId);
         AutomationElement GetChildControl(string parentAutomationId, string childAutomationId);
+        AutomationElement GetChildControl(string parentAutomationId, string childAutomationId, int index);
 
         void ClickTo(string automationId);
         void SetText(string automationId, string text);
+        void SetText(string parentAutomationId, string childAutomationId, string text, int index = 0);
+
         string GetText(string automationId);
-        string GetText(string parentAutomationId, string childAutomationId, int index = 0); // overload mới
+        string GetText(string parentAutomationId, string childAutomationId, int index = 0); // overload
 
         string SafeGetText(AutomationElement el);
-
         string GetInnerMessageFromResult(string resultUcId, string resultTextId, bool pickLastNonEmpty = true);
+
+        // Tiện ích
+        void RefreshCache();
+        IReadOnlyList<AutomationElement> GetControlsById(string automationId);
+        AutomationElement GetNthById(string automationId, int index);
+        AutomationElement GetControlByPath(params string[] automationIds);
     }
 
     /// <summary>
-    /// Triển khai IAutomationService2 sử dụng FlaUI 5.x (UIA3)
+    /// Triển khai IAutomationService2 sử dụng FlaUI (UIA3)
+    /// Phiên bản tương thích rộng (FlaUI 4.x/5.x):
+    /// - Không dùng CacheRequest / Cached API để tránh khác biệt giữa các version
+    /// - Đã tối ưu hot-path: tránh FindAllDescendants khi không cần, ưu tiên FindFirst
+    /// - SetValue (ValuePattern) thay vì Enter() khi có thể
+    /// - Cache map AutomationId -> elements để lookup nhanh
     /// </summary>
     public class AutomationService2 : IAutomationService2
     {
-        private AutomationBase _automation;
+        private UIA3Automation _automation;
         private Application _app;
         private Window _mainWindow;
 
-        private IReadOnlyList<AutomationElement> _cachedNodes;
-        private readonly List<IDisposable> _eventHandlers = new();
+        private IReadOnlyList<AutomationElement> _cachedNodes = Array.Empty<AutomationElement>();
+        private Dictionary<string, List<AutomationElement>> _elementsById =
+            new Dictionary<string, List<AutomationElement>>(StringComparer.Ordinal);
 
-        // Cache theo AutomationId để xử lý duplicate
-        private Dictionary<string, List<AutomationElement>> _elementsById;
-
-        // ====== Attach / Scan / Cache =========================================================
+        // ===================== Attach / Scan / Cache =====================
 
         public void AttachToProcess(int processId)
         {
-            // Dispose tài nguyên cũ
-            _automation?.Dispose();
-            _app?.Dispose();
+            DisposeInternal();
 
             _automation = new UIA3Automation();
             _app = Application.Attach(processId);
@@ -72,15 +402,18 @@ namespace MSFC.Service
             AttachToProcess(process.Id);
         }
 
+        public void RefreshCache() => CacheAllNodes();
+
         private void CacheAllNodes()
         {
             if (_mainWindow == null)
             {
                 _cachedNodes = Array.Empty<AutomationElement>();
-                _elementsById = new Dictionary<string, List<AutomationElement>>(StringComparer.Ordinal);
+                _elementsById = new(StringComparer.Ordinal);
                 return;
             }
 
+            // Quét 1 lần toàn cây; tránh lặp lại trong hot-path
             _cachedNodes = _mainWindow.FindAllDescendants();
 
             _elementsById = _cachedNodes
@@ -89,42 +422,32 @@ namespace MSFC.Service
                 .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
         }
 
-        public void RefreshCache() => CacheAllNodes();
-
         public IReadOnlyList<AutomationElement> ScanApp()
             => _mainWindow == null ? Array.Empty<AutomationElement>() : _mainWindow.FindAllDescendants();
 
-        // ====== Tìm kiếm Control =============================================================
+        // ===================== Find controls =====================
 
-        /// <summary>Trả về control đầu tiên khớp AutomationId (nếu duplicate sẽ lấy phần tử đầu tiên)</summary>
         public AutomationElement GetControlById(string automationId)
         {
-            if (string.IsNullOrWhiteSpace(automationId) || _elementsById == null) return null;
+            if (string.IsNullOrWhiteSpace(automationId)) return null;
             return _elementsById.TryGetValue(automationId, out var list) ? list.FirstOrDefault() : null;
         }
 
-        /// <summary>Trả về tất cả control khớp AutomationId (xử lý duplicate)</summary>
         public IReadOnlyList<AutomationElement> GetControlsById(string automationId)
         {
-            if (string.IsNullOrWhiteSpace(automationId) || _elementsById == null) return Array.Empty<AutomationElement>();
+            if (string.IsNullOrWhiteSpace(automationId)) return Array.Empty<AutomationElement>();
             return _elementsById.TryGetValue(automationId, out var list) ? list : Array.Empty<AutomationElement>();
         }
 
-        /// <summary>Lấy control thứ N theo AutomationId (0-based). Trả null nếu vượt phạm vi.</summary>
         public AutomationElement GetNthById(string automationId, int index)
         {
             var list = GetControlsById(automationId);
             return (index >= 0 && index < list.Count) ? list[index] : null;
         }
 
-        /// <summary>
-        /// Lấy control con theo (parentAutomationId, childAutomationId).
-        /// Nếu có nhiều parent cùng Id, sẽ trả về match đầu tiên tìm thấy trong từng parent theo thứ tự.
-        /// </summary>
         public AutomationElement GetChildControl(string parentAutomationId, string childAutomationId)
             => GetChildControl(parentAutomationId, childAutomationId, 0);
 
-        /// <summary>Overload: lấy control con theo index trong phạm vi parent.</summary>
         public AutomationElement GetChildControl(string parentAutomationId, string childAutomationId, int index)
         {
             if (string.IsNullOrWhiteSpace(parentAutomationId) || string.IsNullOrWhiteSpace(childAutomationId))
@@ -133,75 +456,117 @@ namespace MSFC.Service
             var parents = GetControlsById(parentAutomationId);
             if (parents.Count == 0) return null;
 
-            foreach (var parent in parents)
+            // Tối ưu: thử FindFirst trước; chỉ khi cần index > 0 mới FindAll
+            foreach (var p in parents)
             {
-                var matches = parent.FindAllDescendants(cf => cf.ByAutomationId(childAutomationId));
-                if (matches != null && matches.Length > index)
-                    return matches[index];
+                var first = p.FindFirstDescendant(cf => cf.ByAutomationId(childAutomationId));
+                if (first != null && index == 0) return first;
+
+                if (index > 0)
+                {
+                    var all = p.FindAllDescendants(cf => cf.ByAutomationId(childAutomationId));
+                    if (all != null && all.Length > index)
+                        return all[index];
+                }
             }
             return null;
         }
 
-        /// <summary>
-        /// Tìm control theo "đường dẫn" nhiều cấp: ví dụ ("ucA", "ucB", "txtText")
-        /// → tìm tất cả "ucA", trong đó tìm "ucB", rồi trong đó tìm "txtText".
-        /// </summary>
         public AutomationElement GetControlByPath(params string[] automationIds)
         {
             if (automationIds == null || automationIds.Length == 0) return null;
 
-            var currentLevel = GetControlsById(automationIds[0]).ToList();
-            if (currentLevel.Count == 0) return null;
+            var current = GetControlsById(automationIds[0]);
+            if (current.Count == 0) return null;
 
             for (int i = 1; i < automationIds.Length; i++)
             {
                 string id = automationIds[i];
-                var nextLevel = new List<AutomationElement>();
-                foreach (var parent in currentLevel)
-                {
-                    var found = parent.FindAllDescendants(cf => cf.ByAutomationId(id));
-                    if (found != null && found.Length > 0) nextLevel.AddRange(found);
-                }
-                if (nextLevel.Count == 0) return null;
-                currentLevel = nextLevel;
+                AutomationElement next = null;
+
+                // Dừng ngay khi thấy match đầu tiên để giảm chi phí
+                for (int p = 0; p < current.Count && next == null; p++)
+                    next = current[p].FindFirstDescendant(cf => cf.ByAutomationId(id));
+
+                if (next == null) return null;
+
+                current = new List<AutomationElement>(1) { next };
             }
 
-            return currentLevel.FirstOrDefault();
+            return current[0];
         }
 
-        // ====== Actions ======================================================================
+        // ===================== Actions =====================
 
         public void ClickTo(string automationId)
         {
             var control = GetControlById(automationId);
-            control?.AsButton()?.Invoke();
+            if (control == null) return;
+
+            try
+            {
+                var inv = control.Patterns.Invoke;
+                if (inv.IsSupported)
+                {
+                    inv.Pattern.Invoke();
+                    return;
+                }
+
+                var btn = control.AsButton();
+                if (btn != null)
+                {
+                    btn.Invoke();
+                    return;
+                }
+
+                var br = control.BoundingRectangle;
+                if (!br.IsEmpty) Mouse.Click(br.Center());
+            }
+            catch
+            {
+                // nuốt lỗi nhẹ để tránh ngắt luồng
+            }
         }
 
         public void SetText(string automationId, string text)
         {
-            var control = GetControlById(automationId);
-            control?.AsTextBox()?.Enter(text ?? string.Empty);
+            var el = GetControlById(automationId);
+            SetTextCore(el, text);
         }
 
-        /// <summary>Overload: SetText theo (parent, child, index)</summary>
         public void SetText(string parentAutomationId, string childAutomationId, string text, int index = 0)
         {
             var el = GetChildControl(parentAutomationId, childAutomationId, index);
-            el?.AsTextBox()?.Enter(text ?? string.Empty);
+            SetTextCore(el, text);
         }
 
-        // ====== Đọc Text =====================================================================
+        private static void SetTextCore(AutomationElement el, string text)
+        {
+            if (el == null) return;
+            try
+            {
+                var vp = el.Patterns.Value;
+                if (vp.IsSupported)
+                {
+                    vp.Pattern.SetValue(text ?? string.Empty);
+                    return;
+                }
+                el.AsTextBox()?.Enter(text ?? string.Empty); // fallback
+            }
+            catch
+            {
+                // ignore
+            }
+        }
 
-        /// <summary>
-        /// GetText theo AutomationId (giữ tương thích). Dùng SafeGetText bên trong.
-        /// </summary>
+        // ===================== Read Text =====================
+
         public string GetText(string automationId)
         {
             var control = GetControlById(automationId);
             return SafeGetText(control);
         }
 
-        /// <summary>Overload: GetText theo (parent, child, index)</summary>
         public string GetText(string parentAutomationId, string childAutomationId, int index = 0)
         {
             var el = GetChildControl(parentAutomationId, childAutomationId, index);
@@ -222,31 +587,34 @@ namespace MSFC.Service
 
             try
             {
-                // TextBox/Edit
-                if (el.ControlType == ControlType.Edit && el.Patterns.Value.IsSupported)
-                    return el.Patterns.Value.Pattern.Value ?? string.Empty;
-
-                // Control khác nhưng hỗ trợ ValuePattern (ví dụ ComboBox editable)
-                if (el.Patterns.Value.IsSupported)
-                    return el.Patterns.Value.Pattern.Value ?? string.Empty;
+                // TextBox/Edit & control có ValuePattern
+                var vp = el.Patterns.Value;
+                if (vp.IsSupported)
+                {
+                    var v = vp.Pattern.Value;
+                    if (!string.IsNullOrEmpty(v)) return v;
+                }
 
                 // Document / RichText
-                if (el.Patterns.Text.IsSupported)
+                var tp = el.Patterns.Text;
+                if (tp.IsSupported)
                 {
-                    var t = el.Patterns.Text.Pattern.DocumentRange.GetText(int.MaxValue);
-                    return t?.TrimEnd('\r', '\n') ?? string.Empty;
+                    var range = tp.Pattern.DocumentRange;
+                    var t = range?.GetText(int.MaxValue);
+                    if (!string.IsNullOrEmpty(t)) return t.TrimEnd('\r', '\n');
                 }
 
                 // WPF TextBlock / Label
                 if (el.ControlType == ControlType.Text && !string.IsNullOrEmpty(el.Name))
                     return el.Name;
 
-                // Legacy
-                if (el.Patterns.LegacyIAccessible.IsSupported)
+                // LegacyIAccessible
+                var lp = el.Patterns.LegacyIAccessible;
+                if (lp.IsSupported)
                 {
-                    var lp = el.Patterns.LegacyIAccessible.Pattern;
-                    if (!string.IsNullOrEmpty(lp.Value)) return lp.Value;
-                    if (!string.IsNullOrEmpty(lp.Name)) return lp.Name;
+                    var v = lp.Pattern.Value;
+                    if (!string.IsNullOrEmpty(v)) return v;
+                    if (!string.IsNullOrEmpty(lp.Pattern.Name)) return lp.Pattern.Name;
                 }
 
                 // Fallback Name
@@ -258,9 +626,8 @@ namespace MSFC.Service
 
                 return string.Empty;
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"SafeGetText error: {ex}");
                 return null;
             }
         }
@@ -270,36 +637,66 @@ namespace MSFC.Service
             var uc = GetControlById(resultUcId);
             if (uc == null) return null;
 
-            // Tất cả TextBlock (ControlType.Text) bên trong ucResult
-            var texts = uc.FindAllDescendants(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.Text));
+            var texts = uc.FindAllDescendants(cf => cf.ByControlType(ControlType.Text));
             if (texts == null || texts.Length == 0) return null;
 
-            // Lọc: bỏ chính txtResult (cái hiển thị OK/NG) và bỏ rỗng
-            var filtered = texts
-                .Where(t => !string.Equals(t.AutomationId, resultTextId, StringComparison.Ordinal))
-                .Where(t => !string.IsNullOrWhiteSpace(t.Name))
-                .ToList();
+            if (pickLastNonEmpty)
+            {
+                for (int i = texts.Length - 1; i >= 0; i--)
+                {
+                    var t = texts[i];
+                    if (string.Equals(t.AutomationId, resultTextId, StringComparison.Ordinal)) continue;
+                    var name = t.Name;
+                    if (!string.IsNullOrWhiteSpace(name)) return name.Trim();
+                }
+            }
+            else
+            {
+                for (int i = 0; i < texts.Length; i++)
+                {
+                    var t = texts[i];
+                    if (string.Equals(t.AutomationId, resultTextId, StringComparison.Ordinal)) continue;
+                    var name = t.Name;
+                    if (!string.IsNullOrWhiteSpace(name)) return name.Trim();
+                }
+            }
 
-            if (filtered.Count == 0) return null;
-
-            // Thường message là TextBlock “sâu/đằng sau” → chọn cái cuối
-            var chosen = pickLastNonEmpty ? filtered.Last() : filtered.First();
-            return chosen.Name.Trim();
+            return null;
         }
+        //public string GetInnerMessageFromResult(string resultUcId, string resultTextId, bool pickLastNonEmpty = true)
+        //{
+        //    var uc = GetControlById(resultUcId);
+        //    if (uc == null) return null;
 
+        //    // Tất cả TextBlock (ControlType.Text) bên trong ucResult
+        //    var texts = uc.FindAllDescendants(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.Text));
+        //    if (texts == null || texts.Length == 0) return null;
 
-        // ====== Dispose ======================================================================
+        //    // Lọc: bỏ chính txtResult (cái hiển thị OK/NG) và bỏ rỗng
+        //    var filtered = texts
+        //        .Where(t => !string.Equals(t.AutomationId, resultTextId, StringComparison.Ordinal))
+        //        .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+        //        .ToList();
+
+        //    if (filtered.Count == 0) return null;
+
+        //    // Thường message là TextBlock “sâu/đằng sau” → chọn cái cuối
+        //    var chosen = pickLastNonEmpty ? filtered.Last() : filtered.First();
+        //    return chosen.Name.Trim();
+        //}
+        // ===================== Dispose =====================
 
         public void Dispose()
         {
-            foreach (var h in _eventHandlers)
-                h.Dispose();
-            _eventHandlers.Clear();
+            DisposeInternal();
+        }
 
-            _automation?.Dispose();
+        private void DisposeInternal()
+        {
+            try { _automation?.Dispose(); } catch { }
             _automation = null;
 
-            _app?.Dispose();
+            try { _app?.Dispose(); } catch { }
             _app = null;
 
             _cachedNodes = Array.Empty<AutomationElement>();
