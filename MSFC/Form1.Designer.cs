@@ -72,7 +72,6 @@
             tableLayoutPanel2 = new TableLayoutPanel();
             label4 = new Label();
             tbMain = new TableLayoutPanel();
-            label2 = new Label();
             tbSettingEBR = new TableLayoutPanel();
             txtInspector2 = new TextBox();
             txtInspector1 = new TextBox();
@@ -82,7 +81,6 @@
             txtSettingEBR = new TextBox();
             cbtnConfirmSetting = new CheckBox();
             tbContent = new TableLayoutPanel();
-            richTextBox1 = new RichTextBox();
             tbMain_Row3.SuspendLayout();
             tbData.SuspendLayout();
             pnRight.SuspendLayout();
@@ -116,7 +114,7 @@
             tbMain_Row3.RowCount = 1;
             tbMain_Row3.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             tbMain_Row3.RowStyles.Add(new RowStyle(SizeType.Absolute, 622F));
-            tbMain_Row3.Size = new Size(1435, 690);
+            tbMain_Row3.Size = new Size(1832, 690);
             tbMain_Row3.TabIndex = 0;
             // 
             // tbData
@@ -131,7 +129,7 @@
             tbData.Name = "tbData";
             tbData.RowCount = 1;
             tbData.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            tbData.Size = new Size(1429, 684);
+            tbData.Size = new Size(1826, 684);
             tbData.TabIndex = 1;
             // 
             // pnRight
@@ -357,7 +355,7 @@
             tbRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
             tbRight.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             tbRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 100F));
-            tbRight.Size = new Size(1143, 678);
+            tbRight.Size = new Size(1540, 678);
             tbRight.TabIndex = 1;
             // 
             // pnPID
@@ -367,7 +365,7 @@
             pnPID.Dock = DockStyle.Fill;
             pnPID.Location = new Point(3, 153);
             pnPID.Name = "pnPID";
-            pnPID.Size = new Size(1137, 44);
+            pnPID.Size = new Size(1534, 44);
             pnPID.TabIndex = 3;
             // 
             // lbPID
@@ -389,7 +387,7 @@
             pnStatus.Dock = DockStyle.Fill;
             pnStatus.Location = new Point(3, 3);
             pnStatus.Name = "pnStatus";
-            pnStatus.Size = new Size(1137, 94);
+            pnStatus.Size = new Size(1534, 94);
             pnStatus.TabIndex = 0;
             // 
             // lbStatus
@@ -400,7 +398,7 @@
             lbStatus.ForeColor = Color.Yellow;
             lbStatus.Location = new Point(0, 0);
             lbStatus.Name = "lbStatus";
-            lbStatus.Size = new Size(1137, 94);
+            lbStatus.Size = new Size(1534, 94);
             lbStatus.TabIndex = 1;
             lbStatus.Text = "----";
             lbStatus.TextAlign = ContentAlignment.MiddleCenter;
@@ -413,7 +411,7 @@
             pnDetailStatus.Dock = DockStyle.Fill;
             pnDetailStatus.Location = new Point(3, 103);
             pnDetailStatus.Name = "pnDetailStatus";
-            pnDetailStatus.Size = new Size(1137, 44);
+            pnDetailStatus.Size = new Size(1534, 44);
             pnDetailStatus.TabIndex = 1;
             // 
             // lbDetailStatus
@@ -440,7 +438,7 @@
             btnPrint.ForeColor = SystemColors.ButtonHighlight;
             btnPrint.Location = new Point(3, 581);
             btnPrint.Name = "btnPrint";
-            btnPrint.Size = new Size(1137, 94);
+            btnPrint.Size = new Size(1534, 94);
             btnPrint.TabIndex = 2;
             btnPrint.Text = "🖨️ Imprimir Etiqueta Ahora";
             btnPrint.UseVisualStyleBackColor = false;
@@ -452,7 +450,7 @@
             panel1.Dock = DockStyle.Fill;
             panel1.Location = new Point(3, 203);
             panel1.Name = "panel1";
-            panel1.Size = new Size(1137, 372);
+            panel1.Size = new Size(1534, 372);
             panel1.TabIndex = 4;
             // 
             // tableLayoutPanel1
@@ -467,7 +465,7 @@
             tableLayoutPanel1.Name = "tableLayoutPanel1";
             tableLayoutPanel1.RowCount = 1;
             tableLayoutPanel1.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            tableLayoutPanel1.Size = new Size(1137, 372);
+            tableLayoutPanel1.Size = new Size(1534, 372);
             tableLayoutPanel1.TabIndex = 0;
             // 
             // rtxtDetailExplain
@@ -476,7 +474,7 @@
             rtxtDetailExplain.Dock = DockStyle.Fill;
             rtxtDetailExplain.Location = new Point(3, 3);
             rtxtDetailExplain.Name = "rtxtDetailExplain";
-            rtxtDetailExplain.Size = new Size(831, 366);
+            rtxtDetailExplain.Size = new Size(1228, 366);
             rtxtDetailExplain.TabIndex = 0;
             rtxtDetailExplain.Text = "";
             // 
@@ -488,11 +486,11 @@
             tbPreviewLabel.Controls.Add(tbPreview3, 0, 2);
             tbPreviewLabel.Controls.Add(tableLayoutPanel2, 0, 0);
             tbPreviewLabel.Dock = DockStyle.Fill;
-            tbPreviewLabel.Location = new Point(840, 3);
+            tbPreviewLabel.Location = new Point(1237, 3);
             tbPreviewLabel.Name = "tbPreviewLabel";
             tbPreviewLabel.RowCount = 3;
             tbPreviewLabel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
-            tbPreviewLabel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            tbPreviewLabel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
             tbPreviewLabel.RowStyles.Add(new RowStyle(SizeType.Absolute, 201F));
             tbPreviewLabel.Size = new Size(294, 366);
             tbPreviewLabel.TabIndex = 1;
@@ -511,7 +509,7 @@
             tbPreview2.RowCount = 1;
             tbPreview2.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             tbPreview2.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
-            tbPreview2.Size = new Size(288, 119);
+            tbPreview2.Size = new Size(288, 44);
             tbPreview2.TabIndex = 1;
             // 
             // lbPreviewPno
@@ -521,7 +519,7 @@
             lbPreviewPno.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
             lbPreviewPno.Location = new Point(105, 1);
             lbPreviewPno.Name = "lbPreviewPno";
-            lbPreviewPno.Size = new Size(179, 117);
+            lbPreviewPno.Size = new Size(179, 42);
             lbPreviewPno.TabIndex = 5;
             lbPreviewPno.TextAlign = ContentAlignment.MiddleCenter;
             // 
@@ -532,7 +530,7 @@
             label8.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
             label8.Location = new Point(4, 1);
             label8.Name = "label8";
-            label8.Size = new Size(94, 117);
+            label8.Size = new Size(94, 42);
             label8.TabIndex = 3;
             label8.Text = "Número de pieza";
             label8.TextAlign = ContentAlignment.MiddleCenter;
@@ -546,34 +544,35 @@
             tbPreview3.Controls.Add(lbPreviewScanQty, 1, 0);
             tbPreview3.Controls.Add(label7, 0, 0);
             tbPreview3.Dock = DockStyle.Fill;
-            tbPreview3.Location = new Point(3, 168);
+            tbPreview3.Location = new Point(3, 93);
             tbPreview3.Name = "tbPreview3";
             tbPreview3.RowCount = 1;
             tbPreview3.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            tbPreview3.Size = new Size(288, 195);
+            tbPreview3.Size = new Size(288, 270);
             tbPreview3.TabIndex = 2;
             // 
             // lbPreviewScanQty
             // 
             lbPreviewScanQty.AutoSize = true;
             lbPreviewScanQty.Dock = DockStyle.Fill;
-            lbPreviewScanQty.Font = new Font("Arial", 48F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            lbPreviewScanQty.Font = new Font("Arial", 72F, FontStyle.Bold, GraphicsUnit.Point, 0);
             lbPreviewScanQty.Location = new Point(105, 1);
             lbPreviewScanQty.Name = "lbPreviewScanQty";
-            lbPreviewScanQty.Size = new Size(179, 193);
+            lbPreviewScanQty.Size = new Size(179, 268);
             lbPreviewScanQty.TabIndex = 5;
+            lbPreviewScanQty.Text = "0";
             lbPreviewScanQty.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // label7
             // 
             label7.AutoSize = true;
             label7.Dock = DockStyle.Fill;
-            label7.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            label7.Font = new Font("Arial Narrow", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
             label7.Location = new Point(4, 1);
             label7.Name = "label7";
-            label7.Size = new Size(94, 193);
+            label7.Size = new Size(94, 268);
             label7.TabIndex = 4;
-            label7.Text = "Cantidad";
+            label7.Text = "Número de OK escaneados";
             label7.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // tableLayoutPanel2
@@ -604,13 +603,10 @@
             // 
             // tbMain
             // 
-            tbMain.ColumnCount = 2;
+            tbMain.ColumnCount = 1;
             tbMain.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            tbMain.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 397F));
-            tbMain.Controls.Add(label2, 1, 0);
             tbMain.Controls.Add(tbSettingEBR, 0, 0);
             tbMain.Controls.Add(tbContent, 0, 1);
-            tbMain.Controls.Add(richTextBox1, 1, 1);
             tbMain.Dock = DockStyle.Fill;
             tbMain.Location = new Point(0, 0);
             tbMain.Name = "tbMain";
@@ -620,17 +616,6 @@
             tbMain.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
             tbMain.Size = new Size(1844, 752);
             tbMain.TabIndex = 1;
-            // 
-            // label2
-            // 
-            label2.Dock = DockStyle.Fill;
-            label2.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            label2.Location = new Point(1450, 0);
-            label2.Name = "label2";
-            label2.Size = new Size(391, 50);
-            label2.TabIndex = 5;
-            label2.Text = "Log";
-            label2.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // tbSettingEBR
             // 
@@ -655,17 +640,17 @@
             tbSettingEBR.Name = "tbSettingEBR";
             tbSettingEBR.RowCount = 1;
             tbSettingEBR.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            tbSettingEBR.Size = new Size(1441, 44);
+            tbSettingEBR.Size = new Size(1838, 44);
             tbSettingEBR.TabIndex = 2;
             // 
             // txtInspector2
             // 
             txtInspector2.Dock = DockStyle.Fill;
             txtInspector2.Font = new Font("Arial", 20.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            txtInspector2.Location = new Point(1046, 3);
+            txtInspector2.Location = new Point(1245, 3);
             txtInspector2.MaxLength = 45;
             txtInspector2.Name = "txtInspector2";
-            txtInspector2.Size = new Size(392, 39);
+            txtInspector2.Size = new Size(590, 39);
             txtInspector2.TabIndex = 9;
             // 
             // txtInspector1
@@ -675,14 +660,14 @@
             txtInspector1.Location = new Point(552, 3);
             txtInspector1.MaxLength = 45;
             txtInspector1.Name = "txtInspector1";
-            txtInspector1.Size = new Size(391, 39);
+            txtInspector1.Size = new Size(590, 39);
             txtInspector1.TabIndex = 8;
             // 
             // label5
             // 
             label5.Dock = DockStyle.Fill;
             label5.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            label5.Location = new Point(949, 0);
+            label5.Location = new Point(1148, 0);
             label5.Name = "label5";
             label5.Size = new Size(91, 44);
             label5.TabIndex = 7;
@@ -743,18 +728,8 @@
             tbContent.Name = "tbContent";
             tbContent.RowCount = 1;
             tbContent.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            tbContent.Size = new Size(1441, 696);
+            tbContent.Size = new Size(1838, 696);
             tbContent.TabIndex = 3;
-            // 
-            // richTextBox1
-            // 
-            richTextBox1.BorderStyle = BorderStyle.FixedSingle;
-            richTextBox1.Dock = DockStyle.Fill;
-            richTextBox1.Location = new Point(1450, 53);
-            richTextBox1.Name = "richTextBox1";
-            richTextBox1.Size = new Size(391, 696);
-            richTextBox1.TabIndex = 4;
-            richTextBox1.Text = "";
             // 
             // Form1
             // 
@@ -834,8 +809,6 @@
         private Label label1;
         private Button btnClearNotice;
         private Button btnTraceAndPrint;
-        private Label label2;
-        private RichTextBox richTextBox1;
         private Panel panel1;
         private TableLayoutPanel tableLayoutPanel1;
         private RichTextBox rtxtDetailExplain;

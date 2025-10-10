@@ -155,7 +155,7 @@ namespace MSFC
 
             cbtnConfirmSetting.Checked = true;
             rtxtDetailExplain.ReadOnly = true;
-            richTextBox1.ReadOnly = true;
+            //richTextBox1.ReadOnly = true;
 
 
         }
@@ -203,7 +203,7 @@ namespace MSFC
                     var res = _translator.TranslateAndGuide(msg);
                     lbDetailStatus.Text = _translator.Translate(res.Translated);
                     rtxtDetailExplain.AppendText($"\u2605 {res.ExplainEs}\r\n");
-                    rtxtDetailExplain.SelectionStart = richTextBox1.TextLength;
+                    rtxtDetailExplain.SelectionStart = rtxtDetailExplain.TextLength;
                     rtxtDetailExplain.ScrollToCaret();
                 }
             }
@@ -243,7 +243,7 @@ namespace MSFC
             { lbl.Text = t; return true; }
             return false;
         }
-     
+
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool SetIfChanged(System.Windows.Forms.TextBox tb, string text)
@@ -379,7 +379,7 @@ namespace MSFC
                     SetIfChanged(lbStatus, statusText);
                     // Set preview
                     SetIfChanged(lbPreviewPno, data.EBR);
-                    SetIfChanged(lbPreviewScanQty, _pendingPids.Count().ToString());
+                    SetIfChanged(lbPreviewScanQty, (_pendingPids.Count() + 1).ToString());
 
                     // 6.5) Message detail – chỉ viết khi có & khác
                     if (!string.IsNullOrWhiteSpace(data.Message)) msgs.Add(data.Message);
@@ -569,52 +569,62 @@ namespace MSFC
 
         private async Task UploadToDb(PCB data, CancellationToken ct = default)
         {
-            AddLog($"[DEBUG] Snap Data");
-            // Chuẩn bị entity
-            var scanOutData = new TbScanOut
-            {
-                ClientId = _ClientIp,
-                Pid = data?.PID,
-                ModelSuffix = data?.EBR,
-                PartNo = data?.EBR,
-                WorkOrder = data?.WO,
-                ScanAt = DateTime.Now,
-                Qty = 1,
-                FirstInspector = _inspector1,
-                SecondInspector = _inspector2,
-                _4m = _4M,
-                ScanDate = DateOnly.FromDateTime(DateTime.Now)
+            //AddLog($"[DEBUG] Snap Data");
+            //// Chuẩn bị entity
+            //var scanOutData = new TbScanOut
+            //{
+            //    ClientId = _ClientIp,
+            //    Pid = data?.PID,
+            //    ModelSuffix = data?.EBR,
+            //    PartNo = data?.EBR,
+            //    WorkOrder = data?.WO,
+            //    ScanAt = DateTime.Now,
+            //    Qty = 1,
+            //    FirstInspector = _inspector1,
+            //    SecondInspector = _inspector2,
+            //    _4m = _4M,
+            //    ScanDate = DateOnly.FromDateTime(DateTime.Now)
 
-            };
+            //};
 
             // B3: DB I/O (không UI thread)
             try
             {
                 await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
-                AddLog($"[DEBUG]Check exist");
-                // Check tồn tại theo PID
-                bool exists = await db.TbScanOuts
-                    .AnyAsync(x => x.Pid == data.PID, ct)
-                    .ConfigureAwait(false);
+                // Chỉ rõ cột để tránh insert tất cả cột không cần
+                var sql = @"
+                INSERT INTO tb_scan_out
+                    (CLIENT_ID, PID, WORK_ORDER, PART_NO, SCAN_AT, QTY, FIRST_INSPECTOR, SECOND_INSPECTOR, SCAN_DATE)
+                VALUES
+                    (@CLIENT_ID, @PID, @WORK_ORDER, @PART_NO, @SCAN_AT, @QTY, @FIRST_INSPECTOR, @SECOND_INSPECTOR, @SCAN_DATE)
+                ON DUPLICATE KEY UPDATE
+                    PID = PID;
+                ";
 
-                if (exists)
+                var affected = await db.Database.ExecuteSqlRawAsync(sql, new[]
                 {
-                    AddLog($"[DEBUG]PID exist, Ignore");
-                    return;
-                }
+                    new MySqlConnector.MySqlParameter("@CLIENT_ID",     _ClientIp),
+                     new MySqlConnector.MySqlParameter("@PID",      data.PID),
+                    new MySqlConnector.MySqlParameter("@WORK_ORDER",       data.WO ?? (object)DBNull.Value),
+                    new MySqlConnector.MySqlParameter("@PART_NO",   data.EBR ?? (object)DBNull.Value),
+                    new MySqlConnector.MySqlParameter("@SCAN_AT",  DateTime.Now),
+                    new MySqlConnector.MySqlParameter("@QTY", 1),
+                    new MySqlConnector.MySqlParameter("@FIRST_INSPECTOR",   _inspector1),
+                     new MySqlConnector.MySqlParameter("@SECOND_INSPECTOR",   _inspector2),
+                       new MySqlConnector.MySqlParameter("@SCAN_DATE",   DateTime.Now.Date),
 
-                AddLog($"[DEBUG]No exist, start insert");
-                await db.TbScanOuts.AddAsync(scanOutData, ct).ConfigureAwait(false);
-                await db.SaveChangesAsync(ct).ConfigureAwait(false);
-                AddLog($"[DEBUG] Finish insert");
-                lock (_pendingLock)
+                }, ct).ConfigureAwait(false);
+
+                // Nếu affected == 1 nghĩa là insert mới thành công, == 2 (tùy server) có thể là duplicate (no-op)
+                // Tuy nhiên để đơn giản: chỉ thêm vào pending khi insert mới
+                if (affected > 0)
                 {
-                    _pendingPids.Add(data.PID);
+                    lock (_pendingLock)
+                    {
+                        _pendingPids.Add(data.PID);
+                    }
                 }
-                AddLog($"[DEBUG] Add to _pendingPids");
-
-
             }
             catch (Exception ex)
             {
@@ -1284,8 +1294,9 @@ namespace MSFC
                         {
                             dbMsg = "DB conectado!";
                             SfcMsg = "Vinculado exitosamente con SFC (OK)";
+                            break;
                         }
-                        break;
+
 
                     }
 
@@ -1367,16 +1378,16 @@ namespace MSFC
         }
         private void AddLog(string msg)
         {
-            if (this.IsHandleCreated && !this.IsDisposed)
-            {
-                this.BeginInvoke(new Action(() =>
-                {
-                    //rtxtDetailExplain.AppendText($"{msg}\r\n");
-                    richTextBox1.AppendText($"{msg}\r\n");
-                    richTextBox1.SelectionStart = richTextBox1.TextLength;
-                    richTextBox1.ScrollToCaret();
-                }));
-            }
+            //if (this.IsHandleCreated && !this.IsDisposed)
+            //{
+            //    this.BeginInvoke(new Action(() =>
+            //    {
+            //        //rtxtDetailExplain.AppendText($"{msg}\r\n");
+            //        richTextBox1.AppendText($"{msg}\r\n");
+            //        richTextBox1.SelectionStart = richTextBox1.TextLength;
+            //        richTextBox1.ScrollToCaret();
+            //    }));
+            //}
         }
 
 
@@ -1423,292 +1434,7 @@ namespace MSFC
             await Task.CompletedTask;
         }
 
-        //private async Task LoopAsync(CancellationToken ct)
-        //{
-        //    // nhịp thăm dò tối thiểu
-        //    const int idleDelayMs = 100;
-        //    const int busyDelayMs = 50;
 
-        //    while (!ct.IsCancellationRequested)
-        //    {
-        //        try
-        //        {
-        //            if (_building)
-        //            {
-        //                await Task.Delay(busyDelayMs, ct).ConfigureAwait(false);
-        //                continue;
-        //            }
-
-        //            // --- ĐỌC PID trên UI thread ---
-        //            string currentPid = await OnUiAsync(() =>
-        //            {
-        //                return Normalize(_automationService2.GetText(_config2.Controls.PID)?.Trim() ?? string.Empty);
-        //            }).ConfigureAwait(false);
-
-        //            string currentStatus = await OnUiAsync(() =>
-        //            {
-        //                return Normalize(_automationService2.GetText(_config2.Controls.ResultUc, _config2.Controls.ResultText) ?? string.Empty);
-        //            }).ConfigureAwait(false);
-
-        //            // PID trống -> thả chậm
-        //            if (string.IsNullOrWhiteSpace(currentPid))
-        //            {
-        //                await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
-        //                continue;
-        //            }
-
-        //            // Bỏ trùng PID & status (không xử lý lại)
-        //            if (string.Equals(currentPid, _lastPidValue, StringComparison.OrdinalIgnoreCase) && string.Equals(currentStatus, _lastStatusValue, StringComparison.OrdinalIgnoreCase))
-        //            {
-        //                await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
-        //                continue;
-        //            }
-
-
-        //            // BẮT ĐẦU xử lý PID MỚI
-        //            _building = true;
-        //            try
-        //            {
-        //                // Build dữ liệu (UI thread)
-        //                var data = await OnUiAsync(() =>
-        //                {
-        //                    try
-        //                    {
-        //                        var ebr = _automationService2.GetText(_config2.Controls.ModelSuffixUc, "txtText");
-        //                        var wo = _automationService2.GetText(_config2.Controls.WorkOrderUc, "txtText");
-        //                        var result = _automationService2.GetText(_config2.Controls.ResultUc, _config2.Controls.ResultText);
-        //                        var msg = _automationService2.GetInnerMessageFromResult(_config2.Controls.ResultUc, _config2.Controls.ResultText);
-        //                        var prog = _automationService2.GetText(_config2.Controls.ResultQty);
-
-        //                        return new PCB
-        //                        {
-        //                            PID = Normalize(currentPid),
-        //                            EBR = Normalize(ebr),
-        //                            WO = Normalize(wo),
-        //                            Result = Normalize(result),
-        //                            Message = Normalize(msg),
-        //                            Progress = Normalize(prog)
-        //                        };
-        //                    }
-        //                    catch (Exception ex)
-        //                    {
-        //                        AddLog("OnUi build error: " + ex.GetType().Name + " - " + ex.Message);
-        //                        return null;
-        //                    }
-        //                }).ConfigureAwait(false);
-
-        //                if (data == null)
-        //                {
-        //                    // KHÔNG cập nhật _lastPidValue để lần sau thử lại cùng PID
-        //                    await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
-        //                    continue;
-        //                }
-
-        //                // Cập nhật UI (UI thread)
-        //                await OnUiAsync(() =>
-        //                {
-        //                    UpdateUI(data);
-        //                    return 0;
-        //                }).ConfigureAwait(false);
-
-        //                // Chỉ sau khi UI cập nhật thành công mới xác nhận đã xử lý PID này
-        //                _lastPidValue = currentPid;
-        //                _lastStatusValue = currentStatus;
-
-        //                // Phân loại & ghi DB (NỀN, không UI)
-        //                var kind = Classify(data.Result); // Classify tự CleanResult bên trong (nếu có)
-        //                if (kind == ResultKind.Ok)
-        //                {
-        //                    // snapshot trước khi ghi (không đụng UI)
-        //                    var snap = new PCB
-        //                    {
-        //                        PID = data.PID,
-        //                        EBR = data.EBR,
-        //                        WO = data.WO,
-        //                        Result = data.Result,
-        //                        Message = data.Message,
-        //                        Progress = data.Progress
-        //                        // … thêm các trường cần thiết
-        //                    };
-
-        //                    // I/O async; KHÔNG bọc OnUiAsync
-        //                    try
-        //                    {
-        //                        await UploadToDb(snap, ct).ConfigureAwait(false);
-        //                    }
-        //                    catch (OperationCanceledException) { }
-        //                    catch (Exception ex)
-        //                    {
-        //                        AddLog("UploadToDb error: " + ex.Message);
-        //                    }
-        //                }
-        //            }
-        //            finally
-        //            {
-        //                _building = false;
-        //            }
-        //        }
-        //        catch (OperationCanceledException)
-        //        {
-        //            // thoát yên lặng
-        //            break;
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            AddLog("Loop error: " + ex); // log toàn stack
-        //            await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
-        //        }
-        //    }
-        //}
-
-        /// <summary>
-        /// Cải tiến lần 2
-        /// </summary>
-        /// <param name="maxTries"></param>
-        /// <param name="delayMs"></param>
-        /// <param name="ct"></param>
-        /// <returns></returns>
-        //Stopwatch sw = new Stopwatch();
-        //private async Task LoopAsync(CancellationToken ct)
-        //{
-
-        //    var sw = Stopwatch.StartNew();
-        //    const int idleDelayMs = 100;
-        //    const int busyDelayMs = 50;
-
-        //    while (!ct.IsCancellationRequested)
-        //    {
-        //        try
-        //        {
-        //            if (_building)
-        //            {
-        //                await Task.Delay(busyDelayMs, ct).ConfigureAwait(false);
-        //                continue;
-        //            }
-        //            sw = Stopwatch.StartNew();
-
-        //            // === 1) ĐỌC SNAPSHOT 1 LẦN TRÊN UI THREAD ===
-        //            _building = true;
-        //            var data = await OnUiAsync(() =>
-        //            {
-        //                try
-        //                {
-        //                    string pid = Normalize(_automationService2.GetText(_config2.Controls.PID));
-        //                    string result = Normalize(_automationService2.GetText(_config2.Controls.ResultUc, _config2.Controls.ResultText));
-        //                    string ebr = Normalize(_automationService2.GetText(_config2.Controls.ModelSuffixUc, "txtText"));
-        //                    string wo = Normalize(_automationService2.GetText(_config2.Controls.WorkOrderUc, "txtText"));
-        //                    string msg = Normalize(_automationService2.GetInnerMessageFromResult(_config2.Controls.ResultUc, _config2.Controls.ResultText));
-        //                    string prog = Normalize(_automationService2.GetText(_config2.Controls.ResultQty));
-
-        //                    if (string.IsNullOrWhiteSpace(pid)) return null;
-
-        //                    return new PCB
-        //                    {
-        //                        PID = pid,
-        //                        Result = result,
-        //                        EBR = ebr,
-        //                        WO = wo,
-        //                        Message = msg,
-        //                        Progress = prog
-        //                    };
-        //                }
-        //                catch (Exception ex)
-        //                {
-        //                    AddLog("OnUi snapshot error: " + ex.Message);
-        //                    return null;
-        //                }
-        //            }).ConfigureAwait(false);
-        //            sw.Stop();
-        //            AddLog($"Read UI:{sw.ElapsedMilliseconds}");
-
-        //            if (data == null)
-        //            {
-        //                _building = false;
-        //                await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
-        //                continue;
-        //            }
-
-
-
-        //            // Dedup: nếu PID & Result (clean) trùng với lần trước → bỏ qua
-        //            var resClean = Normalize(data.Result);
-        //            if (string.Equals(data.PID, _lastPidValue, StringComparison.OrdinalIgnoreCase) &&
-        //                string.Equals(resClean, _lastStatusValue, StringComparison.OrdinalIgnoreCase))
-        //            {
-        //                _building = false;
-        //                await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
-        //                continue;
-        //            }
-        //             sw = Stopwatch.StartNew();
-
-        //            // === 2) DEBOUNCE/ỔN ĐỊNH TRẠNG THÁI RESULT ===
-        //            // Nếu chưa OK, chờ ngắn rồi đọc lại 1-2 lần để tránh miss khung READY→OK
-        //            if (Classify(resClean) != ResultKind.Ok)
-        //            {
-        //                var confirmed = await WaitStableOkAsync(maxTries: 2, delayMs: 60, ct);
-        //                if (confirmed != null)
-        //                {
-        //                    // cập nhật theo snapshot OK
-        //                    data.Result = confirmed.Result;
-        //                    data.Message = confirmed.Message;
-        //                    data.Progress = confirmed.Progress;
-        //                    resClean = Normalize(data.Result);
-        //                }
-        //            }
-        //            sw.Stop();
-        //            AddLog($"WaitStableOkAsync:{sw.ElapsedMilliseconds}");
-
-        //            // === 3) CẬP NHẬT UI ===
-        //             sw = Stopwatch.StartNew();
-        //            await OnUiAsync(() =>
-        //            {
-        //                UpdateUI(data);
-        //                return 0;
-        //            }).ConfigureAwait(false);
-        //            sw.Stop();
-        //            AddLog($"UpdateUI:{sw.ElapsedMilliseconds}");
-
-        //            // Cập nhật mốc dedup bằng GIÁ TRỊ ĐÃ CLEAN (nhất quán với Classify)
-        //            _lastPidValue = data.PID;
-        //            _lastStatusValue = resClean;
-        //             sw = Stopwatch.StartNew();
-        //            // === 4) UPLOAD DB KHI OK (sau khi đã debounce) ===
-        //            if (Classify(resClean) == ResultKind.Ok)
-        //            {
-        //                try
-        //                {
-        //                    // snapshot tối thiểu cho DB
-        //                    var snap = new PCB
-        //                    {
-        //                        PID = data.PID,
-        //                        EBR = data.EBR,
-        //                        WO = data.WO,
-        //                        Result = data.Result,
-        //                        Message = data.Message,
-        //                        Progress = data.Progress
-        //                    };
-        //                    await UploadToDb(snap, ct).ConfigureAwait(false);
-        //                }
-        //                catch (OperationCanceledException) { }
-        //                catch (Exception ex)
-        //                {
-        //                    AddLog("UploadToDb error: " + ex.Message);
-        //                }
-        //            }
-        //            sw.Stop();
-        //            AddLog($"UploadToDb:{sw.ElapsedMilliseconds}");
-
-        //            _building = false;
-        //        }
-        //        catch (OperationCanceledException) { break; }
-        //        catch (Exception ex)
-        //        {
-        //            AddLog("Loop error: " + ex);
-        //            _building = false;
-        //            await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
-        //        }
-        //    }
-        //}
 
 
         private async Task LoopAsync(CancellationToken ct)
@@ -2228,5 +1954,5 @@ namespace MSFC
             _cts.Dispose();
         }
     }
-    
+
 }

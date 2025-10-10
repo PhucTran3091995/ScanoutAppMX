@@ -12,4 +12,6 @@ public partial class TbModelDict
     public string? Board { get; set; }
 
     public string? ModelName { get; set; }
+
+    public string? ModelSuffix { get; set; }
 }

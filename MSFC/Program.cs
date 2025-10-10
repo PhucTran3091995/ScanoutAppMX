@@ -52,12 +52,17 @@ namespace MSFC
 
                         services.AddSingleton<IConfiguration>(configuration);
                         services.Configure<UiAutomationSettings>(configuration.GetSection("UiAutomation"));
-                        services.Configure<AutomationConfig2>(configuration.GetSection("AutomationConfig2"));
+                        services.Configure<AutomationConfig2>(configuration.GetSection("AutomationConfig2")); // ui config for SFC
+                        services.Configure<KlasUiConfig>(configuration.GetSection("KLAS_UiConfig")); // ui config for KLAS
                         services.Configure<TranslationConfig>(configuration.GetSection("TranslationConfig"));
 
+                        //var conn = configuration.GetConnectionString("DefaultConnection");
+                        //var serverVersion = new MySqlServerVersion(new Version(8, 0, 43)); // chỉnh đúng
+                        //services.AddDbContextFactory<MMesDbContext>(o => o.UseMySql(conn, serverVersion));
+
                         var conn = configuration.GetConnectionString("DefaultConnection");
-                        var serverVersion = new MySqlServerVersion(new Version(9, 1, 0)); // chỉnh đúng
-                        services.AddDbContextFactory<MMesDbContext>(o => o.UseMySql(conn, serverVersion));
+                        services.AddDbContextFactory<MMesDbContext>(o => o.UseMySql(conn, ServerVersion.AutoDetect(conn)));
+
 
                         //var conn = configuration.GetConnectionString("LocalConnection");
                         //services.AddDbContextFactory<MMesDbContext>(options =>

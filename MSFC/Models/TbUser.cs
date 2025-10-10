@@ -7,17 +7,29 @@ public partial class TbUser
 {
     public int Id { get; set; }
 
-    public string UserName { get; set; } = null!;
+    public string? UserName { get; set; }
 
-    public string Password { get; set; } = null!;
+    public int? RoleId { get; set; }
 
-    public string Name { get; set; } = null!;
+    public string? Position { get; set; }
 
-    public string Email { get; set; } = null!;
+    public string? Active { get; set; }
 
-    public string Dept { get; set; } = null!;
+    public string? Email { get; set; }
 
-    public string Factory { get; set; } = null!;
+    public string? FullName { get; set; }
 
-    public string Active { get; set; } = null!;
+    public string? PasswordHash { get; set; }
+
+    public DateTime? CreateAt { get; set; }
+
+    public DateTime? UpdateAt { get; set; }
+
+    public DateTime? LastLogin { get; set; }
+
+    public virtual TbDept? Role { get; set; }
+
+    public virtual ICollection<TbInternalDefect> TbInternalDefects { get; set; } = new List<TbInternalDefect>();
+
+    public virtual ICollection<TbRomHistory> TbRomHistories { get; set; } = new List<TbRomHistory>();
 }

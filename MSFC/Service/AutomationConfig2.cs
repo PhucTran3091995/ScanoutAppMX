@@ -25,4 +25,36 @@ namespace MSFC.Service
         public string ResultUc { get; set; }
         public string ResultText { get; set; }
     }
+    public class KlasUiConfig
+    {
+        public string AppUrl { get; set; }
+        public string ProcessName { get; set; }
+        public string actionDelaySec { get; set; }
+        public string waitCmdQueryDelaySec { get; set; }
+        public string KlasScanIntervalSec { get; set; }
+
+        public string waitExcelDelaySec { get; set; }
+        public string saveFolder { get; set; }
+
+        public string KlasAcc { get; set; }
+        public string KlasPassword { get; set; }
+
+        public KlasControlNames Controls { get; set; }
+    }
+    public class KlasControlNames
+    {
+        public string PrintManagementMenu { get; set; }
+        public string LabelPrintLogMenu { get; set; }
+        public string SearchButton { get; set; }
+        public string ExcelButton { get; set; }
+        public string savePath { get; set; }
+        public string saveButton { get; set; }
+        public string saveOkButton { get; set; }
+        public string overideButton { get; set; }
+        public string Account { get; set; }
+        public string Password { get; set; }
+        public string LoginBtn { get; set; }
+        public string LogoutBtn { get; set; }
+
+    }
 }
