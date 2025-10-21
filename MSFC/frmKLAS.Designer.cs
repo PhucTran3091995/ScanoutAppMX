@@ -29,11 +29,12 @@
         private void InitializeComponent()
         {
             tbMain = new TableLayoutPanel();
-            tbControl = new TableLayoutPanel();
             btnStart = new Button();
             rtxtLog = new RichTextBox();
+            label1 = new Label();
+            numInterval = new NumericUpDown();
             tbMain.SuspendLayout();
-            tbControl.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)numInterval).BeginInit();
             SuspendLayout();
             // 
             // tbMain
@@ -41,36 +42,26 @@
             tbMain.ColumnCount = 2;
             tbMain.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100F));
             tbMain.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            tbMain.Controls.Add(tbControl, 0, 0);
-            tbMain.Controls.Add(rtxtLog, 1, 0);
+            tbMain.Controls.Add(btnStart, 0, 1);
+            tbMain.Controls.Add(rtxtLog, 1, 1);
+            tbMain.Controls.Add(label1, 0, 0);
+            tbMain.Controls.Add(numInterval, 1, 0);
             tbMain.Dock = DockStyle.Fill;
             tbMain.Location = new Point(0, 0);
             tbMain.Name = "tbMain";
-            tbMain.RowCount = 1;
+            tbMain.RowCount = 3;
+            tbMain.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
             tbMain.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            tbMain.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
             tbMain.Size = new Size(800, 450);
             tbMain.TabIndex = 0;
-            // 
-            // tbControl
-            // 
-            tbControl.ColumnCount = 1;
-            tbControl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            tbControl.Controls.Add(btnStart, 0, 0);
-            tbControl.Dock = DockStyle.Fill;
-            tbControl.Location = new Point(3, 3);
-            tbControl.Name = "tbControl";
-            tbControl.RowCount = 2;
-            tbControl.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
-            tbControl.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            tbControl.Size = new Size(94, 444);
-            tbControl.TabIndex = 0;
             // 
             // btnStart
             // 
             btnStart.Dock = DockStyle.Fill;
-            btnStart.Location = new Point(3, 3);
+            btnStart.Location = new Point(3, 33);
             btnStart.Name = "btnStart";
-            btnStart.Size = new Size(88, 44);
+            btnStart.Size = new Size(94, 394);
             btnStart.TabIndex = 0;
             btnStart.Text = "Start";
             btnStart.UseVisualStyleBackColor = true;
@@ -80,11 +71,34 @@
             // 
             rtxtLog.BorderStyle = BorderStyle.FixedSingle;
             rtxtLog.Dock = DockStyle.Fill;
-            rtxtLog.Location = new Point(103, 3);
+            rtxtLog.Location = new Point(103, 33);
             rtxtLog.Name = "rtxtLog";
-            rtxtLog.Size = new Size(694, 444);
+            rtxtLog.Size = new Size(694, 394);
             rtxtLog.TabIndex = 1;
             rtxtLog.Text = "";
+            // 
+            // label1
+            // 
+            label1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            label1.AutoSize = true;
+            label1.Location = new Point(3, 0);
+            label1.Name = "label1";
+            label1.Size = new Size(94, 30);
+            label1.TabIndex = 2;
+            label1.Text = "Interval (sec)";
+            label1.TextAlign = ContentAlignment.MiddleCenter;
+            // 
+            // numInterval
+            // 
+            numInterval.Increment = new decimal(new int[] { 1000, 0, 0, 0 });
+            numInterval.Location = new Point(103, 3);
+            numInterval.Maximum = new decimal(new int[] { 186400, 0, 0, 0 });
+            numInterval.Minimum = new decimal(new int[] { 5, 0, 0, 0 });
+            numInterval.Name = "numInterval";
+            numInterval.Size = new Size(167, 23);
+            numInterval.TabIndex = 3;
+            numInterval.Value = new decimal(new int[] { 7200, 0, 0, 0 });
+            numInterval.ValueChanged += numInterval_ValueChanged;
             // 
             // frmKLAS
             // 
@@ -95,17 +109,20 @@
             Name = "frmKLAS";
             Text = "frmKLAS";
             FormClosing += frmKLAS_FormClosing;
+            Load += frmKLAS_Load;
             Resize += frmKLAS_Resize;
             tbMain.ResumeLayout(false);
-            tbControl.ResumeLayout(false);
+            tbMain.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)numInterval).EndInit();
             ResumeLayout(false);
         }
 
         #endregion
 
         private TableLayoutPanel tbMain;
-        private TableLayoutPanel tbControl;
         private Button btnStart;
         private RichTextBox rtxtLog;
+        private Label label1;
+        private NumericUpDown numInterval;
     }
 }

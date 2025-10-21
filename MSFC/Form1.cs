@@ -379,7 +379,7 @@ namespace MSFC
                     SetIfChanged(lbStatus, statusText);
                     // Set preview
                     SetIfChanged(lbPreviewPno, data.EBR);
-                    SetIfChanged(lbPreviewScanQty, (_pendingPids.Count() + 1).ToString());
+                  
 
                     // 6.5) Message detail – chỉ viết khi có & khác
                     if (!string.IsNullOrWhiteSpace(data.Message)) msgs.Add(data.Message);
@@ -389,6 +389,12 @@ namespace MSFC
                     // 6.6) Progress – chỉ cập nhật khi OK (không mismatch) **và** giá trị khác
                     if (finalKind == ResultKind.Ok)
                     {
+                        lock (_pendingLock)
+                        {
+                            _pendingPids.Add(data.PID);
+                        }
+                        //SetIfChanged(lbPreviewScanQty, (_pendingPids.Count() + 1).ToString());
+                        SetIfChanged(lbPreviewScanQty, _pendingPids.Count().ToString());
                         var (completedQty, woQty) = ExtractProgressSafe(data.Progress);
                         int done = Math.Max(0, completedQty);
                         int total = Math.Max(1, woQty);
@@ -569,24 +575,7 @@ namespace MSFC
 
         private async Task UploadToDb(PCB data, CancellationToken ct = default)
         {
-            //AddLog($"[DEBUG] Snap Data");
-            //// Chuẩn bị entity
-            //var scanOutData = new TbScanOut
-            //{
-            //    ClientId = _ClientIp,
-            //    Pid = data?.PID,
-            //    ModelSuffix = data?.EBR,
-            //    PartNo = data?.EBR,
-            //    WorkOrder = data?.WO,
-            //    ScanAt = DateTime.Now,
-            //    Qty = 1,
-            //    FirstInspector = _inspector1,
-            //    SecondInspector = _inspector2,
-            //    _4m = _4M,
-            //    ScanDate = DateOnly.FromDateTime(DateTime.Now)
-
-            //};
-
+          
             // B3: DB I/O (không UI thread)
             try
             {
@@ -616,15 +605,15 @@ namespace MSFC
 
                 }, ct).ConfigureAwait(false);
 
-                // Nếu affected == 1 nghĩa là insert mới thành công, == 2 (tùy server) có thể là duplicate (no-op)
-                // Tuy nhiên để đơn giản: chỉ thêm vào pending khi insert mới
-                if (affected > 0)
-                {
-                    lock (_pendingLock)
-                    {
-                        _pendingPids.Add(data.PID);
-                    }
-                }
+                //// Nếu affected == 1 nghĩa là insert mới thành công, == 2 (tùy server) có thể là duplicate (no-op)
+                //// Tuy nhiên để đơn giản: chỉ thêm vào pending khi insert mới
+                //if (affected > 0)
+                //{
+                //    lock (_pendingLock)
+                //    {
+                //        _pendingPids.Add(data.PID);
+                //    }
+                //}
             }
             catch (Exception ex)
             {
@@ -1582,6 +1571,8 @@ namespace MSFC
                             Progress = data.Progress
                         };
                         _uploadSvc.Enqueue(snap); // fire-and-forget, chạy nền
+
+                       
                     }
                     _building = false;
                 }

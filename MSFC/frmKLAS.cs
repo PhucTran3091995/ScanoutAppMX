@@ -36,7 +36,8 @@ namespace MSFC
         private CancellationTokenSource? _cts;
         private Task? _mainLoopTask;
         private Task? _keepAliveTask;
-
+        private bool _isLogin = false;
+        private int _interval;
         private NotifyIcon _notifyIcon;
 
         public frmKLAS(
@@ -136,42 +137,107 @@ namespace MSFC
                 return false;
             }
         }
+        private readonly SemaphoreSlim _gate = new(1, 1);
 
         private async void btnStart_Click(object sender, EventArgs e)
         {
-            btnStart.Text = "Stop";
-          
-        
-
+            await _gate.WaitAsync();
             try
             {
-                if (!_isWatching)
+                btnStart.Text = "Stop";
+                btnStart.Enabled = false;          // chống double-click trong lúc chuyển trạng thái
+                numInterval.Enabled = false;
+
+                if (!canConnect)
                 {
-                    await StartAllLoop();
-                }
-                else
-                {
-                    try
+                    for (int attempt = 1; attempt <= 5; attempt++)
                     {
+                        AddLog($"============ Try to connect DB {attempt}/{5} ============");
+                        using var db = await _dbFactory.CreateDbContextAsync();
+                        canConnect = await db.Database.CanConnectAsync();
+                        if (canConnect) { AddLog("Connected to DB successfully!"); break; }
+
+                        await Task.Delay(500);
+                        continue;
+                    }
+                    if (!canConnect)
+                    {
+                        btnStart.Enabled = true;          // chống double-click trong lúc chuyển trạng thái
+                        numInterval.Enabled = true;
                         btnStart.Text = "Start";
-                        await StopAllLoopAsync();
-                        _isWatching = false;
-                    }
-                    catch (Exception ex)
-                    {
-                        AddLog($"Error: {ex.Message}");
+                        AddLog("Can't connect to DB! Recheck connection or setting");
+                        return;
                     }
                 }
+                else AddLog("Connected to DB successfully!");
+
+
+                if (!_isWatching)
+                    await StartAsync();
+                else
+                    await StopAsync();
             }
             catch (Exception ex)
             {
-                AddLog(ex.Message);
+                AddLog($"❌ Toggle error: {ex.Message}");
+            }
+            finally
+            {
+                btnStart.Enabled = true;
+                numInterval.Enabled = !_isWatching; // chỉ cho đổi interval khi không chạy
+                btnStart.Text = _isWatching ? "Stop" : "Start";
+                _gate.Release();
+            }
+        }
+        private async Task StartAsync()
+        {
+            // Nếu còn task cũ => dừng gọn trước
+            if (_cts != null || _mainLoopTask != null)
+                await StopAsync();
+
+            _cts = new CancellationTokenSource();
+            _isWatching = true;
+
+            // KHÔNG cần Task.Run: LoopAsync tự await bên trong, không block UI thread
+            _mainLoopTask = LoopAsync(_cts.Token);
+            AddLog("▶️ Started.");
+        }
+        private async Task StopAsync()
+        {
+            if (_cts == null && _mainLoopTask == null)
+                return;
+
+            try
+            {
+                btnStart.Enabled = true;          // chống double-click trong lúc chuyển trạng thái
+                numInterval.Enabled = true;
+                btnStart.Text = "Start";
+                _cts?.Cancel();
+                if (_mainLoopTask != null)
+                    await _mainLoopTask; // đợi vòng lặp thoát hẳn
+                AddLog("⏹️ Stopped.");
+            }
+            catch (OperationCanceledException)
+            {
+                AddLog("⏹️ Stopped (canceled).");
+            }
+            catch (Exception ex)
+            {
+                AddLog($"❌ Stop error: {ex.Message}");
+            }
+            finally
+            {
+                _cts?.Dispose();
+                _cts = null;
+                _mainLoopTask = null;
+                _isWatching = false;
             }
         }
         private async Task StartAllLoop()
         {
             try
             {
+
                 // Nếu đang chạy, dừng trước
                 if (_cts != null)
                 {
@@ -180,16 +246,11 @@ namespace MSFC
                 }
 
                 _cts = new CancellationTokenSource();
-
-                AddLog("🚀 Starting main loop and keep-alive loop...");
-
-                // Chạy song song, lưu Task lại để stop/await về sau
-                _mainLoopTask = Task.Run(() => LoopAsync(_cts.Token));
-                //_keepAliveTask = Task.Run(() => KeepAliveSearchLoopAsync(_cts.Token));
+                _mainLoopTask = Task.Run(async () => await LoopAsync(_cts.Token));
             }
             catch (Exception ex)
             {
-                AddLog($"❌ StartAllLoop error: {ex.Message}");
+                AddLog($"❌ StartAllLoop error");
             }
         }
         private async Task StopAllLoopAsync()
@@ -202,13 +263,13 @@ namespace MSFC
 
             AddLog("🛑 Stopping all loops...");
             btnStart.Text = "Stopping...";
-
+            numInterval.Enabled = true;
             try
             {
                 _cts.Cancel();
 
                 // Đợi cho đến khi các vòng lặp dừng hẳn
-                var tasks = new[] { _mainLoopTask, _keepAliveTask }
+                var tasks = new[] { _mainLoopTask }
                     .Where(t => t != null)
                     .ToArray()!;
 
@@ -223,287 +284,215 @@ namespace MSFC
                 _cts.Dispose();
                 _cts = null;
                 _mainLoopTask = null;
-                _keepAliveTask = null;
                 btnStart.Text = "Start";
                 AddLog("✅ All loops stopped cleanly.");
             }
         }
 
-
+        bool isKlasOpen = false;
+        bool _attachedKlas = false, canConnect = false;
         private async Task LoopAsync(CancellationToken ct)
         {
-           
-            const int idleDelayMs = 100;
+            // Lấy interval hiện tại 1 lần khi start; nếu muốn thay đổi “nóng” hãy đọc lại mỗi vòng
+            var ms = Math.Max(50, (int)numInterval.Value); // guard tối thiểu 50ms
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(ms));
+
+            try
+            {
+                while (await timer.WaitForNextTickAsync(ct))
+                {
+                    await DoOneIterationAsync(ct);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // bình thường khi stop
+            }
+            catch (Exception ex)
+            {
+                // log rồi quyết định: tiếp tục hay thoát vòng lặp.
+                // Ở đây mình chọn ghi log và tiếp tục (tuỳ nhu cầu có thể rethrow để dừng)
+                AddLog($"⚠️ Loop error: {ex.Message}");
+            }
+        }
+        private async Task DoOneIterationAsync(CancellationToken ct)
+        {
+            //_isWatching = true;
             int actionDelayMs = int.Parse(_Config.actionDelaySec) * 1000;
             int waitCmdQueryDelay = int.Parse(_Config.waitCmdQueryDelaySec) * 1000;
             int waitExcelDelayMs = int.Parse(_Config.waitExcelDelaySec) * 1000;
             int KlasScanIntervalSec = int.Parse(_Config.KlasScanIntervalSec) * 1000;
-            while (!ct.IsCancellationRequested)
+
+            int maxRetry = 5;
+            int delayMs = 500;
+            string dbMsg = string.Empty;
+            string SfcMsg = string.Empty;
+
+            //await _uiaWorker.Run(() =>
+            //{
+            //    rtxtLog.Clear();
+            //});
+            // 1. Open KLAS
+            if (!isKlasOpen) isKlasOpen = OpenKLAS(); else AddLog("KLAS opened");
+            await Task.Delay(actionDelayMs);
+
+            // 2. Try to attach (OPEN KLAS, CONNECT DB, ATTACH PROCESS)
+            if (!_attachedKlas)
             {
-                try
+                AddLog("Start attach process");
+
+                for (int attempt = 1; attempt <= maxRetry; attempt++)
                 {
-                    // 1. Open KLAS
-                    var isOpen = OpenKLAS();
-                    if (!isOpen) return;
-                    await Task.Delay(5000);
-
-                    // 2. Try to attach
-                    AddLog("Start attach process");
-                    int maxRetry = 50;
-                    int delayMs = 500;
-                    bool attached = false, canConnect = false;
-
-                    string dbMsg = string.Empty;
-                    string SfcMsg = string.Empty;
-                    for (int attempt = 1; attempt <= maxRetry; attempt++)
-                    {
-                        // Check DB connection
-                        using var db = await _dbFactory.CreateDbContextAsync();
-                        canConnect = await db.Database.CanConnectAsync();
-                        if (!canConnect)
-                        {
-                            AddLog($"============ Connect to DB fail ============");
-                            await Task.Delay(delayMs);
-                            continue;
-                        }
-
-                        // Check SFC attach
-                        try
-                        {
-                            AddLog("Try to attach");
-                            _automationService2.AttachToProcess(_Config.ProcessName);
-                            attached = true;
-                        }
-                        catch (Exception ex)
-                        {
-                            AddLog($"============ Retry {attempt}/{maxRetry} ============");
-                            AddLog(ex.ToString());
-                            await Task.Delay(delayMs);
-                            continue;
-                        }
-
-                        // If both connected & attached -> break    
-                        if (attached /*&& canConnect*/)
-                        {
-                            dbMsg = "Connected to DB successfully!";
-                            SfcMsg = "Connected to KLAS successfully!";
-                            AddLog(dbMsg);
-                            AddLog(SfcMsg);
-                            _isWatching = true;
-                            break;
-                        }
-                    }
-
-                    // Log in
-                    if (!await IsLoggedInAsync(ct))
-                    {
-                        // chỉ làm Step 1,2, Refresh cache
-                        await _uiaWorker.Run(() =>
-                        {
-                            _automationService2.SetText(_Config.Controls.Account, _Config.KlasAcc);
-                            AddLog("Account");
-                            _automationService2.SetText(_Config.Controls.Password, _Config.KlasPassword);
-                            AddLog("Password");
-                        });
-                        await Task.Delay(5000, ct);
-
-                        await _uiaWorker.Run(() =>
-                        {
-                            _automationService2.ClickTo(_Config.Controls.LoginBtn);
-                            AddLog("LoginBtn");
-                        });
-
-                        // đợi form main và cache lại
-                        await Task.Delay(5000, ct);
-                        await _uiaWorker.Run(() =>
-                        {
-                            _automationService2.AttachToProcess(_Config.ProcessName);
-                            AddLog("Reattached and refreshed main window.");
-                        });
-                        await Task.Delay(5000, ct);
-                    }
-
-                    await _uiaWorker.Run(() =>
-                    {
-                        //_automationService2.ClickTo(_Config.Controls.PrintManagementMenu);
-                        //AddLog("PrintManagementMenu");
-
-                        _automationService2.ClickSubMenuById(_Config.Controls.PrintManagementMenu, _Config.Controls.LabelPrintLogMenu, 5000);
-                        AddLog("LabelPrintLogMenu");
-                       
-                    });
-                    await Task.Delay(5000, ct);
-
-
-
-                    // Step 5: Click cmdQuery (query button)
-                    await _uiaWorker.Run(() =>
+                    try
                     {
                         _automationService2.AttachToProcess(_Config.ProcessName);
-                        AddLog("Reattached and refreshed main window.");
-                    });
-                    await Task.Delay(5000, ct);
-
-                    await _uiaWorker.Run(() =>
-                    {
-                        _automationService2.ClickTo(_Config.Controls.SearchButton);
-                        AddLog("SearchButton");
-                    });
-                    await Task.Delay(waitCmdQueryDelay, ct);
-
-
-                    // Step 6: Click cmdExcel (export to Excel)
-                    await _uiaWorker.Run(() =>
-                    {
-                        _automationService2.ClickTo(_Config.Controls.ExcelButton);
-                    });
-                    AddLog("ExcelButton");
-                    await Task.Delay(waitExcelDelayMs, ct);
-
-
-                    // Chuẩn bị file path
-                    var exportDir = _Config.saveFolder;
-                    if (!System.IO.Directory.Exists(exportDir))
-                        System.IO.Directory.CreateDirectory(exportDir);
-                    var fileName = System.IO.Path.Combine(exportDir, $"{DateTime.Now:yyyyMMddHHmmssff}.xlsx");
-                  
-
-                    // 2) Đợi Save dialog của app đích xuất hiện
-                    var res = await _automationService2.WaitTargetSaveDialogAsync(ct, TimeSpan.FromSeconds(8));
-                    if (res is { } found)
-                    {
-                        var (dlg, fileNameEdit, saveBtn) = found;
-
-                        // 3) Gõ đường dẫn file
-                        fileNameEdit.AsTextBox()?.Enter(fileName);
-                        await Task.Delay(2000, ct);
-                        // 4) Bấm Save
-                        // Ưu tiên pattern Invoke/SelectionItem/ExpandCollapse theo ClickTo của bạn, đơn giản hóa:
-                        saveBtn.AsButton()?.Invoke();
-                        await Task.Delay(2000, ct);
-
-                        var okClicked = await _automationService2.WaitNextOkDialogAsync(ct, TimeSpan.FromSeconds(6), null);
-                        await Task.Delay(2000, ct);
-
-                        // Sau khi nhấn OK, đọc lại fileName nếu cần
-                        bool fileExists = false;
-                        for (int i = 0; i < 10; i++)
-                        {
-                            if (System.IO.File.Exists(fileName))
-                            {
-                                fileExists = true;
-                                break;
-                            }
-                            await Task.Delay(300, ct); 
-
-                        }
-
-                        await Task.Delay(2000, ct);
-                        // Tắt KLAS
-                        await _uiaWorker.Run(() =>
-                        {
-                            _automationService2.ClickTo(_Config.Controls.LogoutBtn);
-                            AddLog("LogoutBtn");
-                        });
-                        await Task.Delay(2000, ct);
-
-                        var YesClicked = await _automationService2.WaitNextOkDialogAsync(ct, TimeSpan.FromSeconds(6), null);
-                        AddLog("Turn off KLAS");
-                        await Task.Delay(2000, ct);
-
-                        if (YesClicked)
-                        {
-                            // Upload to DB
-                            if (fileExists)
-                            {
-                                AddLog($"Exported file: {fileName}");
-
-                                bool ready = false;
-
-                                for (int attempt = 1; attempt <= 5 && !ct.IsCancellationRequested; attempt++)
-                                {
-                                    ready = await WaitForFileStableAsync(fileName, TimeSpan.FromSeconds(5), ct);
-                                    if (ready)
-                                    {
-                                        AddLog($"✅ File ready on attempt {attempt}.");
-                                        break;
-                                    }
-
-                                    AddLog($"⚠️ File chưa sẵn sàng (attempt {attempt}/{maxRetry}), đợi {5000} ms rồi thử lại...");
-                                    await Task.Delay(5000, ct);
-                                }
-
-                                if (!ready)
-                                {
-                                    AddLog("❌ Sau nhiều lần thử, file vẫn bị khóa hoặc chưa ghi xong. Bỏ qua lượt này.");
-                                    return;
-                                }
-
-                                // ========== 1) Đọc Excel ==========
-                                AddLog("📖 Start reading file...");
-                                List<Dictionary<string, string>> kvRows;
-                                try
-                                {
-                                    kvRows = ReadExcelRows(fileName);
-                                    if (kvRows == null || kvRows.Count == 0)
-                                    {
-                                        AddLog("⚠️ File trống hoặc không có dữ liệu. Bỏ qua upload.");
-                                        return;
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    AddLog($"❌ Lỗi đọc Excel: {ex.Message}");
-                                    return;
-                                }
-
-                                // Lọc trùng WO cho dtos
-                                var dtos = MapRowsToDtos(kvRows)
-                                    .Where(d =>
-                                        !string.IsNullOrWhiteSpace(d.Wo)
-                                        && d.Wo.Length == 13
-                                        && d.StartSn.Contains("HM", StringComparison.OrdinalIgnoreCase))
-                                    .ToList();
-
-                                if (dtos.Count == 0)
-                                {
-                                    AddLog("⚠️ Không có bản ghi hợp lệ (PID trống). Bỏ qua upload.");
-                                    return;
-                                }
-
-                                // ========== 3) Upload DB ==========
-                                AddLog($"⬆️ Uploading {dtos.Count} rows to DB...");
-                                try
-                                {
-                                    var count = await UploadDtosToDbAsync(dtos, () => _dbFactory.CreateDbContextAsync(), ct);
-                                    AddLog($"✅ Imported {count} rows từ {Path.GetFileName(fileName)}");
-                                }
-                                catch (Exception ex)
-                                {
-                                    AddLog($"❌ Lỗi upload DB: {ex.Message}");
-                                    return;
-                                }
-
-                              
-                            }
-                            else
-                            {
-                                AddLog($"❌ File not found after export: {fileName}");
-                            }
-                        }
-                        // ========== 4) Nghỉ nhịp ==========
-                        AddLog($"⏱️ Wait for next upload after {KlasScanIntervalSec / 1000} sec");
-                        await Task.Delay(KlasScanIntervalSec, ct);
+                        _attachedKlas = true;
+                        AddLog("Connected to KLAS successfully!");
+                        _isWatching = true;
+                        break;
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        // Không thấy dialog: log / retry / báo lỗi
+                        AddLog($"============ Retry attach {attempt}/{maxRetry} ============");
+                        //AddLog(ex.ToString());
+                        await Task.Delay(delayMs);
+                        continue;
                     }
-
                 }
-                catch (Exception ex) { }
+
+            }
+            else
+            {
+                AddLog("Attached KLAS");
             }
 
+
+            // 3. Log in
+            if (!_isLogin)
+            {
+                // Điền acc/pass
+                await _uiaWorker.Run(() =>
+                {
+                    _automationService2.SetText(_Config.Controls.Account, _Config.KlasAcc);
+                    AddLog("Account");
+                    _automationService2.SetText(_Config.Controls.Password, _Config.KlasPassword);
+                    AddLog("Password");
+                });
+                await Task.Delay(actionDelayMs, ct);
+
+                // click login btn
+                await _uiaWorker.Run(() =>
+                {
+                    _automationService2.ClickTo(_Config.Controls.LoginBtn);
+                    AddLog("LoginBtn");
+                });
+                await Task.Delay(actionDelayMs, ct);
+                _isLogin = true;
+            }
+            else AddLog("Login done");
+
+            // Step 5: refresh lại UI node cache do form thay đổi
+            await _uiaWorker.Run(() => { _automationService2.AttachToProcess(_Config.ProcessName); AddLog("Reattached and refreshed main window."); });
+            await Task.Delay(actionDelayMs, ct);
+
+            // 4. Click label print log menu
+            await _uiaWorker.Run(() => { _automationService2.ClickSubMenuById(_Config.Controls.PrintManagementMenu, _Config.Controls.LabelPrintLogMenu, 5000); AddLog("LabelPrintLogMenu"); });
+            await Task.Delay(actionDelayMs, ct);
+
+
+
+            // Step 5: refresh lại UI node cache do form thay đổi
+            await _uiaWorker.Run(() => { _automationService2.AttachToProcess(_Config.ProcessName); AddLog("Reattached and refreshed main window."); });
+            await Task.Delay(actionDelayMs, ct);
+
+
+            var now = DateTime.Now.ToString("yyyy-MM-dd");
+            var past = DateTime.Now.AddDays(-7).ToString("yyyy-MM-dd");
+            await _uiaWorker.Run(() => { _automationService2.SetText("dtpDate_S", "PART_TextBox", past); _automationService2.SetText("dtpDate_E", "PART_TextBox", now); AddLog("Input date range"); });
+            await Task.Delay(actionDelayMs, ct);
+
+            // Click searchBtn
+            await _uiaWorker.Run(() => { _automationService2.ClickTo(_Config.Controls.SearchButton); AddLog("SearchButton"); });
+            await Task.Delay(waitCmdQueryDelay, ct);
+
+
+            // Step 6: Click cmdExcel (export to Excel)
+            await _uiaWorker.Run(() => { _automationService2.ClickTo(_Config.Controls.ExcelButton); AddLog("ExcelButton"); });
+            await Task.Delay(waitExcelDelayMs, ct);
+
+
+            // Chuẩn bị file path
+            var exportDir = _Config.saveFolder;
+            if (!System.IO.Directory.Exists(exportDir))
+                System.IO.Directory.CreateDirectory(exportDir);
+            var fileName = System.IO.Path.Combine(exportDir, $"{DateTime.Now:yyyyMMddHHmmssff}.xlsx");
+
+
+
+            // 7. Đợi Save dialog của app đích xuất hiện
+            var res = await _automationService2.WaitTargetSaveDialogAsync(ct, TimeSpan.FromSeconds(8));
+
+            if (res is { } found)
+            {
+                AddLog("found saveDialog");
+                var (dlg, fileNameEdit, saveBtn) = found;
+
+                // 3) Gõ đường dẫn file
+                fileNameEdit.AsTextBox()?.Enter(fileName); AddLog("Edit file name");
+                await Task.Delay(actionDelayMs, ct);
+                // 4) Bấm Save
+                // Ưu tiên pattern Invoke/SelectionItem/ExpandCollapse theo ClickTo của bạn, đơn giản hóa:
+                saveBtn.AsButton()?.Invoke(); AddLog("Click save");
+                await Task.Delay(actionDelayMs, ct);
+
+                var okClicked = await _automationService2.WaitNextOkDialogAsync(ct, TimeSpan.FromSeconds(10), null); AddLog("Click OK after save");
+                await Task.Delay(actionDelayMs, ct);
+
+
+
+                if (okClicked)
+                {
+                    AddLog("Saved excel");
+
+                    // ========== 1) Đọc Excel ==========
+                    AddLog("📖 Start reading file...");
+                    List<Dictionary<string, string>> kvRows;
+                    try
+                    {
+                        kvRows = ReadExcelRows(fileName);
+                        if (kvRows == null || kvRows.Count == 0) { AddLog("⚠️ File trống hoặc không có dữ liệu. Bỏ qua upload."); return; }
+                    }
+                    catch (Exception ex) { AddLog($"❌ Lỗi đọc Excel: {ex.Message}"); return; }
+
+                    // Lọc trùng WO cho dtos
+                    var dtos = MapRowsToDtos(kvRows).Where(d => !string.IsNullOrWhiteSpace(d.Wo) && d.Wo.Length == 13 && d.StartSn.Contains("HM", StringComparison.OrdinalIgnoreCase)).ToList();
+
+                    if (dtos.Count == 0) return;
+
+                    try
+                    {
+                        var count = await UploadDtosToDbAsync(dtos, () => _dbFactory.CreateDbContextAsync(), ct); AddLog($"✅ Imported {count} rows from {Path.GetFileName(fileName)}");
+                    }
+                    catch (Exception ex) { AddLog($"❌ Lỗi upload DB: {ex.Message}"); return; }
+
+                    File.Delete(fileName);
+                    // ========== 4) Nghỉ nhịp ==========
+                    AddLog($"⏱️ Wait for next upload after {_interval} sec");
+                    await Task.Delay(_interval * 1000, ct);
+                }
+                else
+                {
+                    AddLog("Not click OK after save file");
+                }
+
+            }
+            else
+            {
+                AddLog("Not found saveDialog");
+            }
+            // ví dụ demo:
+            await Task.Yield();
+            // ... công việc ...
         }
         private async Task<bool> IsLoggedInAsync(CancellationToken ct)
         {
@@ -741,6 +730,16 @@ namespace MSFC
                     ToolTipIcon.Info
                 );
             }
+        }
+
+        private void numInterval_ValueChanged(object sender, EventArgs e)
+        {
+            _interval = (int)numInterval.Value;
+        }
+
+        private void frmKLAS_Load(object sender, EventArgs e)
+        {
+            _interval = (int)numInterval.Value;
         }
     }
 

@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 using Application = FlaUI.Core.Application;
 
 namespace MSFC.Service
@@ -41,7 +42,7 @@ namespace MSFC.Service
 
         string SafeGetText(AutomationElement el);
         string GetInnerMessageFromResult(string resultUcId, string resultTextId, bool pickLastNonEmpty = true);
-       
+
 
         // Tiện ích
         void RefreshCache();
@@ -60,9 +61,10 @@ namespace MSFC.Service
 
         public Task<(AutomationElement dialog, AutomationElement fileNameEdit, AutomationElement saveButton)?> WaitTargetSaveDialogAsync(CancellationToken ct, TimeSpan timeout);
         public Task<bool> WaitNextOkDialogAsync(CancellationToken ct, TimeSpan timeout, IntPtr? lastClosedDialogHwnd = null);
-
+        public Task<bool> WaitNextYesDialogAsync(CancellationToken ct, TimeSpan timeout, IntPtr? lastClosedDialogHwnd = null);
         public bool ClickSubMenuById(string parentId, string childId, int timeoutMs = 2000);
-
+        public Task<bool> CloseAttachedAppAsync(TimeSpan timeout, bool forceKillOnTimeout = true, CancellationToken ct = default);
+        public Task<bool> AltF4Async(TimeSpan timeout, bool forceKillOnTimeout = true, CancellationToken ct = default);
     }
 
     /// <summary>
@@ -80,6 +82,8 @@ namespace MSFC.Service
         private Application _app;
         private Window _mainWindow;
         private int _processId;
+        private Process? _process;
+
 
         //private IReadOnlyList<AutomationElement> _cachedNodes = Array.Empty<AutomationElement>();
         private List<AutomationElement> _cachedNodes = new();
@@ -100,6 +104,8 @@ namespace MSFC.Service
                 ?? throw new InvalidOperationException("Cannot get main window of process.");
             _processId = processId;
 
+            _process = Process.GetProcessById(processId);
+
             CacheAllNodes();
         }
 
@@ -109,6 +115,107 @@ namespace MSFC.Service
                 ?? throw new InvalidOperationException($"Process '{processName}' not found.");
             AttachToProcess(process.Id);
         }
+
+        public async Task<bool> CloseAttachedAppAsync(
+         TimeSpan timeout,
+         bool forceKillOnTimeout = true,
+         CancellationToken ct = default)
+        {
+            // Không còn app/automation thì coi như đã đóng
+            if (_process == null || _process.HasExited)
+                return true;
+
+            try
+            {
+                // 1) Cố gắng đóng “gracefully”
+                //    - Ưu tiên Close() của cửa sổ chính (giống Alt+F4)
+                _mainWindow?.Close();
+
+                // 2) Nếu vì lý do nào đó window null, thử Application.Close()
+                _app?.Close();
+
+                // 3) Đợi tiến trình thoát
+                var exited = await WaitForExitAsync(_process.Id, timeout, ct);
+                if (exited) return true;
+
+                // 4) Hết thời gian mà chưa thoát
+                if (forceKillOnTimeout)
+                {
+                    TryKillTree();
+                    return await WaitForExitAsync(_processId, TimeSpan.FromSeconds(3), ct);
+                }
+
+                return false;
+            }
+            catch
+            {
+                // Fallback cuối: Kill
+                TryKillTree();
+                return await WaitForExitAsync(_processId, TimeSpan.FromSeconds(3), ct);
+            }
+        }
+        public async Task<bool> AltF4Async(
+        TimeSpan timeout,
+        bool forceKillOnTimeout = true,
+        CancellationToken ct = default)
+        {
+            if (_mainWindow == null || _automation == null || _process == null || _process.HasExited)
+                return true;
+
+            _mainWindow.Focus();
+            // Gửi tổ hợp phím Alt+F4
+            Keyboard.Press(VirtualKeyShort.ALT);
+            Keyboard.Press(VirtualKeyShort.F4);
+            Keyboard.Release(VirtualKeyShort.F4);
+            Keyboard.Release(VirtualKeyShort.ALT);
+
+            var exited = await WaitForExitAsync(_process.Id, timeout, ct);
+            if (exited) return true;
+
+            if (forceKillOnTimeout)
+            {
+                TryKillTree();
+                return await WaitForExitAsync(_processId, TimeSpan.FromSeconds(3), ct);
+            }
+            return false;
+        }
+        private void TryKillTree()
+        {
+            try
+            {
+                // Nếu dùng FlaUI: Kill tiến trình chính
+                _app?.Kill();
+
+                // Nếu muốn chắc chắn và có quyền: kill theo cây
+                if (_process != null && !_process.HasExited)
+                {
+                    // .NET có overload Kill(entireProcessTree: true)
+                    _process.Kill(entireProcessTree: true);
+                }
+            }
+            catch { /* nuốt lỗi */ }
+        }
+
+        private static async Task<bool> WaitForExitAsync(int pid, TimeSpan timeout, CancellationToken ct = default)
+        {
+            var sw = Stopwatch.StartNew();
+            while (sw.Elapsed < timeout && !ct.IsCancellationRequested)
+            {
+                try
+                {
+                    var p = Process.GetProcessById(pid);
+                    if (p.HasExited) return true;
+                }
+                catch
+                {
+                    // Process không còn tồn tại => coi như đã thoát
+                    return true;
+                }
+                await Task.Delay(100, ct);
+            }
+            return false;
+        }
+
 
         public void RefreshCache() => CacheAllNodes();
 
@@ -640,6 +747,8 @@ namespace MSFC.Service
             _cachedNodes = new List<AutomationElement>();
             _elementsById = null;
             _mainWindow = null;
+            _process = null;
+            _processId = 0;
         }
 
         #region Dành riêng cho KLAS
@@ -845,7 +954,11 @@ namespace MSFC.Service
         private static readonly string[] FileNameEditNames = { "File name", "Nombre de archivo", "Nombre del archivo", "Nombre de ficheiro", "Nome do arquivo", "Dateiname" };
         private static readonly string[] SaveButtonNames = { "Save", "Guardar", "Guardar como", "Save As" };
         private static readonly string[] CancelButtonNames = { "Cancel", "Cancelar" };
+        //private static readonly string[] OkButtonNames = { "OK", "Aceptar", "Aceptar.", "Aceptar ", "Aceptar…", "Sí", "Si", "Yes" };
         private static readonly string[] OkButtonNames = { "OK", "Aceptar", "Aceptar.", "Aceptar ", "Aceptar…", "Sí", "Si", "Yes", };
+        private static readonly string[] YesButtonNames = { "Yes" };
+
+
         /// <summary>
         /// Sau khi bạn click excelButton, gọi hàm này để đợi đúng Save dialog của app đích.
         /// </summary>
@@ -856,8 +969,10 @@ namespace MSFC.Service
             var deadline = DateTime.UtcNow + timeout;
 
 
+
             while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
             {
+                await Task.Delay(200, ct).ConfigureAwait(false);
                 // Tìm các cửa sổ thuộc process đích
                 var windows = desktop.FindAllChildren(
                     cf.ByControlType(ControlType.Window).Or(cf.ByControlType(ControlType.Pane)));
@@ -870,13 +985,14 @@ namespace MSFC.Service
                     win.Properties.ProcessId.TryGetValue(out var pid);
                     if (pid != _processId)
                         continue; // chỉ lấy cửa sổ thuộc process app đích
+                    await Task.Delay(200, ct).ConfigureAwait(false);
 
                     // Có Edit (ô nhập file name)
                     var edits = win.FindAllDescendants(cf.ByControlType(ControlType.Edit));
                     var fileNameEdit = edits?.FirstOrDefault(e =>
                         (e.Name ?? "").Contains("File", StringComparison.OrdinalIgnoreCase) ||
                         (e.Name ?? "").Contains("Nombre", StringComparison.OrdinalIgnoreCase));
-
+                    await Task.Delay(200, ct).ConfigureAwait(false);
                     if (fileNameEdit == null)
                         continue;
 
@@ -888,15 +1004,17 @@ namespace MSFC.Service
                         return name.Equals("Save", StringComparison.OrdinalIgnoreCase)
                                || name.Equals("Guardar", StringComparison.OrdinalIgnoreCase);
                     });
-
+                    await Task.Delay(200, ct).ConfigureAwait(false);
                     if (saveBtn == null)
                         continue;
 
+                    await Task.Delay(200, ct).ConfigureAwait(false);
                     try { win.Focus(); } catch { }
                     return (win, fileNameEdit, saveBtn);
+
                 }
 
-                await Task.Delay(150, ct).ConfigureAwait(false);
+                await Task.Delay(200, ct).ConfigureAwait(false);
             }
 
             return null;
@@ -921,6 +1039,153 @@ namespace MSFC.Service
             try { el.Click(); return true; } catch { }
             return false;
         }
+
+        public static async Task<bool> TryClickAsync(
+            AutomationElement el,
+            CancellationToken ct,
+            Func<bool>? postCondition = null,     // ví dụ: () => !dialog.IsAvailable
+            TimeSpan? settleDelay = null,         // delay nhỏ sau focus/scroll
+            int maxRetries = 2
+        )
+        {
+            if (el == null || !el.IsEnabled) return false;
+
+            var delay = settleDelay ?? TimeSpan.FromMilliseconds(120);
+
+            // 1) Đưa vào tầm nhìn & foreground (nếu có)
+            try
+            {
+                el.Patterns.ScrollItem.PatternOrDefault?.ScrollIntoView();
+            }
+            catch { /* ignore */ }
+
+            try
+            {
+                // focus control hoặc owner window
+                el.Focus();
+            }
+            catch { /* ignore */ }
+
+            await Task.Delay(delay, ct).ConfigureAwait(false);
+
+            for (int attempt = 0; attempt <= maxRetries && !ct.IsCancellationRequested; attempt++)
+            {
+                bool clicked = false;
+
+                // 2) Invoke
+                try
+                {
+                    var inv = el.Patterns.Invoke.PatternOrDefault;
+                    if (inv != null && el.IsEnabled)
+                    {
+                        inv.Invoke();
+                        clicked = true;
+                    }
+                }
+                catch { /* try next */ }
+
+                // 3) SelectionItem (menu item/list item…)
+                if (!clicked)
+                {
+                    try
+                    {
+                        var sel = el.Patterns.SelectionItem.PatternOrDefault;
+                        if (sel != null)
+                        {
+                            sel.Select();
+                            clicked = true;
+                        }
+                    }
+                    catch { }
+                }
+
+                // 4) ExpandCollapse (đề phòng split button, combo v.v.)
+                if (!clicked)
+                {
+                    try
+                    {
+                        var exp = el.Patterns.ExpandCollapse.PatternOrDefault;
+                        if (exp != null)
+                        {
+                            exp.Expand();
+                            clicked = true;
+                        }
+                    }
+                    catch { }
+                }
+
+                // 5) LegacyIAccessible – rất hữu ích với control “giả nút”
+                if (!clicked)
+                {
+                    try
+                    {
+                        var acc = el.Patterns.LegacyIAccessible.PatternOrDefault;
+                        if (acc != null)
+                        {
+                            acc.DoDefaultAction();
+                            clicked = true;
+                        }
+                    }
+                    catch { }
+                }
+
+                // 6) Fallback: click toạ độ
+                if (!clicked)
+                {
+                    try
+                    {
+                        var rect = el.BoundingRectangle;
+                        if (!rect.IsEmpty)
+                        {
+                            var center = rect.Center();
+                            FlaUI.Core.Input.Mouse.MoveTo(center);
+                            await Task.Delay(60, ct).ConfigureAwait(false);
+                            FlaUI.Core.Input.Mouse.Click();
+                            clicked = true;
+                        }
+                    }
+                    catch { }
+                }
+
+                // 7) Fallback cuối: phím Enter (nếu là default button)
+                if (!clicked)
+                {
+                    try
+                    {
+                        FlaUI.Core.Input.Keyboard.Type(VirtualKeyShort.RETURN);
+                        clicked = true;
+                    }
+                    catch { }
+                }
+
+                // Nếu đã click, chờ settle + kiểm tra hậu điều kiện nếu có
+                if (clicked)
+                {
+                    await Task.Delay(delay, ct).ConfigureAwait(false);
+
+                    if (postCondition == null)
+                        return true;
+
+                    // chờ hậu điều kiện trong ~1.5s
+                    var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(1500);
+                    while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
+                    {
+                        bool ok = false;
+                        try { ok = postCondition(); }
+                        catch { ok = true; } // nếu element biến mất -> coi như ok
+
+                        if (ok) return true;
+                        await Task.Delay(120, ct).ConfigureAwait(false);
+                    }
+                }
+
+                // thử lại (element có thể vừa mới render xong)
+                await Task.Delay(120, ct).ConfigureAwait(false);
+            }
+
+            return false;
+        }
+
         public async Task<bool> WaitNextOkDialogAsync(CancellationToken ct, TimeSpan timeout, IntPtr? lastClosedDialogHwnd = null)
         {
             var desktop = _automation.GetDesktop();
@@ -929,21 +1194,26 @@ namespace MSFC.Service
 
             while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
             {
+                await Task.Delay(200, ct).ConfigureAwait(false);
+
                 var tops = desktop.FindAllChildren(
                     cf.ByControlType(ControlType.Window).Or(cf.ByControlType(ControlType.Pane)));
 
                 foreach (var win in tops)
                 {
                     if (win == null || !win.IsEnabled) continue;
+                    await Task.Delay(200, ct).ConfigureAwait(false);
 
                     // Cùng ProcessId với app đích
                     win.Properties.ProcessId.TryGetValue(out var pid);
                     if (pid != _processId) continue;
+                    await Task.Delay(200, ct).ConfigureAwait(false);
 
                     // Tránh bắt lại chính dialog cũ (nếu UIA chưa refresh kịp)
                     var hwnd = (IntPtr)win.Properties.NativeWindowHandle.Value;
                     if (lastClosedDialogHwnd.HasValue && hwnd == lastClosedDialogHwnd.Value)
                         continue;
+                    await Task.Delay(200, ct).ConfigureAwait(false);
 
                     // Tìm nút OK (hoặc Aceptar / Yes / Sí)
                     var buttons = win.FindAllDescendants(cf.ByControlType(ControlType.Button));
@@ -953,11 +1223,80 @@ namespace MSFC.Service
                         // so sánh chặt chẽ theo Equals; nếu muốn nới lỏng có thể dùng IndexOf
                         return OkButtonNames.Any(n => name.Equals(n, StringComparison.OrdinalIgnoreCase));
                     });
+                    await Task.Delay(200, ct).ConfigureAwait(false);
 
                     if (okBtn != null)
                     {
-                        try { win.Focus(); } catch { /* ignore */ }
+                        try
+                        {
+                            win.Focus();
+                            //FlaUI.Core.Input.Keyboard.Type(VirtualKeyShort.RETURN);
+                        }
+                        catch { /* ignore */ }
                         var clicked = await TryClick(okBtn);
+
+                        //var clicked = await TryClickAsync(okBtn, ct);
+
+                        if (clicked) return true;
+                    }
+                }
+
+                await Task.Delay(500, ct).ConfigureAwait(false);
+            }
+
+            return false;
+        }
+        public async Task<bool> WaitNextYesDialogAsync(CancellationToken ct, TimeSpan timeout, IntPtr? lastClosedDialogHwnd = null)
+        {
+            var desktop = _automation.GetDesktop();
+            var cf = _automation.ConditionFactory;
+            var deadline = DateTime.UtcNow + timeout;
+
+            while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
+            {
+                await Task.Delay(200, ct).ConfigureAwait(false);
+
+                var tops = desktop.FindAllChildren(
+                    cf.ByControlType(ControlType.Window).Or(cf.ByControlType(ControlType.Pane)));
+
+                foreach (var win in tops)
+                {
+                    if (win == null || !win.IsEnabled) continue;
+                    await Task.Delay(200, ct).ConfigureAwait(false);
+
+                    // Cùng ProcessId với app đích
+                    win.Properties.ProcessId.TryGetValue(out var pid);
+                    if (pid != _processId) continue;
+                    await Task.Delay(200, ct).ConfigureAwait(false);
+
+                    // Tránh bắt lại chính dialog cũ (nếu UIA chưa refresh kịp)
+                    var hwnd = (IntPtr)win.Properties.NativeWindowHandle.Value;
+                    if (lastClosedDialogHwnd.HasValue && hwnd == lastClosedDialogHwnd.Value)
+                        continue;
+                    await Task.Delay(200, ct).ConfigureAwait(false);
+
+                    // Tìm nút OK (hoặc Aceptar / Yes / Sí)
+                    var buttons = win.FindAllDescendants(cf.ByControlType(ControlType.Button));
+                    var yesBtn = buttons?.FirstOrDefault(b =>
+                    {
+                        var name = b.Name ?? string.Empty;
+                        // so sánh chặt chẽ theo Equals; nếu muốn nới lỏng có thể dùng IndexOf
+                        return YesButtonNames.Any(n => name.Equals(n, StringComparison.OrdinalIgnoreCase));
+                    });
+                    await Task.Delay(200, ct).ConfigureAwait(false);
+
+                    if (yesBtn != null)
+                    {
+                        try
+                        {
+                            win.Focus();
+                            //FlaUI.Core.Input.Keyboard.Type(VirtualKeyShort.RETURN);
+                        }
+                        catch { /* ignore */ }
+                        var clicked = await TryClick(yesBtn);
+
+                        //var clicked = await TryClickAsync(yesBtn, ct);
+
                         if (clicked) return true;
                     }
                 }

@@ -457,7 +457,7 @@
             // 
             tableLayoutPanel1.ColumnCount = 2;
             tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300F));
+            tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 349F));
             tableLayoutPanel1.Controls.Add(rtxtDetailExplain, 0, 0);
             tableLayoutPanel1.Controls.Add(tbPreviewLabel, 1, 0);
             tableLayoutPanel1.Dock = DockStyle.Fill;
@@ -474,7 +474,7 @@
             rtxtDetailExplain.Dock = DockStyle.Fill;
             rtxtDetailExplain.Location = new Point(3, 3);
             rtxtDetailExplain.Name = "rtxtDetailExplain";
-            rtxtDetailExplain.Size = new Size(1228, 366);
+            rtxtDetailExplain.Size = new Size(1179, 366);
             rtxtDetailExplain.TabIndex = 0;
             rtxtDetailExplain.Text = "";
             // 
@@ -486,13 +486,13 @@
             tbPreviewLabel.Controls.Add(tbPreview3, 0, 2);
             tbPreviewLabel.Controls.Add(tableLayoutPanel2, 0, 0);
             tbPreviewLabel.Dock = DockStyle.Fill;
-            tbPreviewLabel.Location = new Point(1237, 3);
+            tbPreviewLabel.Location = new Point(1188, 3);
             tbPreviewLabel.Name = "tbPreviewLabel";
             tbPreviewLabel.RowCount = 3;
             tbPreviewLabel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             tbPreviewLabel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
             tbPreviewLabel.RowStyles.Add(new RowStyle(SizeType.Absolute, 201F));
-            tbPreviewLabel.Size = new Size(294, 366);
+            tbPreviewLabel.Size = new Size(343, 366);
             tbPreviewLabel.TabIndex = 1;
             // 
             // tbPreview2
@@ -509,7 +509,7 @@
             tbPreview2.RowCount = 1;
             tbPreview2.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             tbPreview2.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
-            tbPreview2.Size = new Size(288, 44);
+            tbPreview2.Size = new Size(337, 44);
             tbPreview2.TabIndex = 1;
             // 
             // lbPreviewPno
@@ -519,7 +519,7 @@
             lbPreviewPno.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
             lbPreviewPno.Location = new Point(105, 1);
             lbPreviewPno.Name = "lbPreviewPno";
-            lbPreviewPno.Size = new Size(179, 42);
+            lbPreviewPno.Size = new Size(228, 42);
             lbPreviewPno.TabIndex = 5;
             lbPreviewPno.TextAlign = ContentAlignment.MiddleCenter;
             // 
@@ -548,7 +548,7 @@
             tbPreview3.Name = "tbPreview3";
             tbPreview3.RowCount = 1;
             tbPreview3.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            tbPreview3.Size = new Size(288, 270);
+            tbPreview3.Size = new Size(337, 270);
             tbPreview3.TabIndex = 2;
             // 
             // lbPreviewScanQty
@@ -558,7 +558,7 @@
             lbPreviewScanQty.Font = new Font("Arial", 72F, FontStyle.Bold, GraphicsUnit.Point, 0);
             lbPreviewScanQty.Location = new Point(105, 1);
             lbPreviewScanQty.Name = "lbPreviewScanQty";
-            lbPreviewScanQty.Size = new Size(179, 268);
+            lbPreviewScanQty.Size = new Size(228, 268);
             lbPreviewScanQty.TabIndex = 5;
             lbPreviewScanQty.Text = "0";
             lbPreviewScanQty.TextAlign = ContentAlignment.MiddleCenter;
@@ -586,7 +586,7 @@
             tableLayoutPanel2.Name = "tableLayoutPanel2";
             tableLayoutPanel2.RowCount = 1;
             tableLayoutPanel2.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-            tableLayoutPanel2.Size = new Size(288, 34);
+            tableLayoutPanel2.Size = new Size(337, 34);
             tableLayoutPanel2.TabIndex = 3;
             // 
             // label4
@@ -596,7 +596,7 @@
             label4.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
             label4.Location = new Point(4, 1);
             label4.Name = "label4";
-            label4.Size = new Size(280, 32);
+            label4.Size = new Size(329, 32);
             label4.TabIndex = 2;
             label4.Text = "Vista previa de la etiqueta";
             label4.TextAlign = ContentAlignment.MiddleCenter;
