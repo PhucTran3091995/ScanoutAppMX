@@ -741,6 +741,7 @@
             Name = "Form1";
             Text = "[VR-HS] Línea PCBA OSP para VR HAENGSUNG · Embalaje";
             Load += Form1_Load;
+            KeyDown += Form1_KeyDown;
             tbMain_Row3.ResumeLayout(false);
             tbData.ResumeLayout(false);
             pnRight.ResumeLayout(false);

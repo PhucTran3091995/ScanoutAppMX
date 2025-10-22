@@ -1,4 +1,5 @@
-﻿using FlaUI.Core;
+﻿using DocumentFormat.OpenXml.Spreadsheet;
+using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;   // for TreeScope, ControlType, etc.
 using FlaUI.Core.EventHandlers;
@@ -25,6 +26,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Drawing.Printing;
 using System.Drawing.Text;
 using System.Globalization;
@@ -55,6 +57,8 @@ using static FlaUI.Core.FrameworkAutomationElementBase;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using static ZXing.QrCode.Internal.Version;
+using Color = System.Drawing.Color;
+using Font = System.Drawing.Font;
 using Label = System.Windows.Forms.Label;
 
 
@@ -153,8 +157,7 @@ namespace MSFC
 
             SetAutoStart(true);
 
-            cbtnConfirmSetting.Checked = true;
-            rtxtDetailExplain.ReadOnly = true;
+          
             //richTextBox1.ReadOnly = true;
 
 
@@ -189,9 +192,9 @@ namespace MSFC
         private void ResetRtxtDetailExplain()
         {
             rtxtDetailExplain.Clear();
-            rtxtDetailExplain.ForeColor = Color.Black;
+            rtxtDetailExplain.ForeColor = System.Drawing.Color.Black;
             rtxtDetailExplain.BackColor = SystemColors.Window;
-            rtxtDetailExplain.Font = new Font(rtxtDetailExplain.Font.FontFamily, 9, FontStyle.Regular);
+            rtxtDetailExplain.Font = new System.Drawing.Font(rtxtDetailExplain.Font.FontFamily, 9, FontStyle.Regular);
         }
         private void ShowNoticeAndExplain(List<string> msgs)
         {
@@ -217,8 +220,8 @@ namespace MSFC
 
         sealed class RedrawScope : IDisposable
         {
-            private readonly Control _ctrl;
-            public RedrawScope(Control ctrl)
+            private readonly System.Windows.Forms.Control _ctrl;
+            public RedrawScope(System.Windows.Forms.Control ctrl)
             {
                 _ctrl = ctrl;
                 if (ctrl?.IsHandleCreated == true)
@@ -379,7 +382,7 @@ namespace MSFC
                     SetIfChanged(lbStatus, statusText);
                     // Set preview
                     SetIfChanged(lbPreviewPno, data.EBR);
-                  
+
 
                     // 6.5) Message detail – chỉ viết khi có & khác
                     if (!string.IsNullOrWhiteSpace(data.Message)) msgs.Add(data.Message);
@@ -478,8 +481,8 @@ namespace MSFC
                 ResetRtxtDetailExplain();
                 // status
                 lbStatus.Text = "LISTA";
-                lbStatus.ForeColor = Color.Yellow;
-                lbStatus.BackColor = Color.Black;
+                lbStatus.ForeColor = System.Drawing.Color.Yellow;
+                lbStatus.BackColor = System.Drawing.Color.Black;
                 // detail sattus
                 lbDetailStatus.Text = "-";
                 lbDetailStatus.ForeColor = Color.Black;
@@ -575,7 +578,7 @@ namespace MSFC
 
         private async Task UploadToDb(PCB data, CancellationToken ct = default)
         {
-          
+
             // B3: DB I/O (không UI thread)
             try
             {
@@ -861,105 +864,119 @@ namespace MSFC
 
         private async void btnPrint_Click(object sender, EventArgs e)
         {
-            var msg = string.Empty;
-            if (_uploadSvc.IsAnyRunning())
+
+            _tagLabel = new ManufacturingTagDto
             {
-                msg = "Sincronizando servidor, por favor espere";
-                ShowDetailStatus(msg);
-                await _uploadSvc.WaitAllIdleAsync();
-            }
+                ModelName = $"HONDA 25.5MY MAIN",
+                Date = DateTime.Now.ToString("dd/MM/yyyy"),
+                PartNo = "EBR25069601",
+                Quantity = 50,
+                TagId = 123456789,
+                Inspector1 = txtInspector1.Text,
+                Inspector2 = txtInspector2.Text
+                //PidList = tagDatas.Select(x => x.Pid).ToList()
+            };
+            PrintTag(_tagLabel);
 
-            msg = "Sincronización completada. Comienza a imprimir sellos.";
-            ShowDetailStatus(msg);
-            try
-            {
-                //if (!lbStatus.Text.Equals("OK", StringComparison.OrdinalIgnoreCase))
-                //{
-                //    ShowDetailStatus("El último PID escaneado debe ser OK y coincidir con EBR.");
-                //    return;
-                //}
+            //var msg = string.Empty;
+            //if (_uploadSvc.IsAnyRunning())
+            //{
+            //    msg = "Sincronizando servidor, por favor espere";
+            //    ShowDetailStatus(msg);
+            //    await _uploadSvc.WaitAllIdleAsync();
+            //}
 
-                // snapshot danh sách PID đang chờ in (batch hiện tại)
-                string[] batchPids;
-                lock (_pendingLock)
-                {
-                    batchPids = _pendingPids.ToArray();
-                }
-                AddLog($"[DEBUG] batchPids: {string.Join(",\r\n", batchPids)}");
-                AddLog($"[DEBUG] _ClientIp: {_ClientIp}, _settingEBR: {_settingEBR}");
+            //msg = "Sincronización completada. Comienza a imprimir sellos.";
+            //ShowDetailStatus(msg);
+            //try
+            //{
+            //    //if (!lbStatus.Text.Equals("OK", StringComparison.OrdinalIgnoreCase))
+            //    //{
+            //    //    ShowDetailStatus("El último PID escaneado debe ser OK y coincidir con EBR.");
+            //    //    return;
+            //    //}
 
-                // And after fetching tagDatas:
+            //    // snapshot danh sách PID đang chờ in (batch hiện tại)
+            //    string[] batchPids;
+            //    lock (_pendingLock)
+            //    {
+            //        batchPids = _pendingPids.ToArray();
+            //    }
+            //    AddLog($"[DEBUG] batchPids: {string.Join(",\r\n", batchPids)}");
+            //    AddLog($"[DEBUG] _ClientIp: {_ClientIp}, _settingEBR: {_settingEBR}");
 
-                if (batchPids.Length == 0)
-                {
-                    ShowDetailStatus("No hay PIDs pendientes para imprimir.");
-                    return;
-                }
+            //    // And after fetching tagDatas:
 
-                using var db = await _dbFactory.CreateDbContextAsync();
+            //    if (batchPids.Length == 0)
+            //    {
+            //        ShowDetailStatus("No hay PIDs pendientes para imprimir.");
+            //        return;
+            //    }
 
-                // Lấy đúng các dòng thuộc batch hiện tại, chưa in
-                var tagDatas = await (
-                    from s in db.TbScanOuts
-                    join m in db.TbModelDicts on s.PartNo equals m.PartNo into gj
-                    from m in gj.DefaultIfEmpty()     // <-- left join
-                    where batchPids.Contains(s.Pid)
-                    select new
-                    {
-                        PartNo = m != null ? m.PartNo : null,   // có thể null nếu không match
-                        ModelName = m != null ? m.ModelName : null,
-                        Board = m != null ? m.Board : null,
-                        Pid = s.Pid
-                    }
-                ).ToListAsync();
+            //    using var db = await _dbFactory.CreateDbContextAsync();
 
-                AddLog($"[DEBUG] tagDatas.Count: {tagDatas.Count}");
-                if (tagDatas.Count == 0)
-                {
-                    ShowDetailStatus("No se encontraron PIDs válidos en el lote actual.");
-                    //// loại các PID không còn match khỏi batch để tránh lặp vô hạn
-                    //lock (_pendingLock)
-                    //{
-                    //    foreach (var pid in batchPids) _pendingPids.Remove(pid);
-                    //}
-                    return;
-                }
+            //    // Lấy đúng các dòng thuộc batch hiện tại, chưa in
+            //    var tagDatas = await (
+            //        from s in db.TbScanOuts
+            //        join m in db.TbModelDicts on s.PartNo equals m.PartNo into gj
+            //        from m in gj.DefaultIfEmpty()     // <-- left join
+            //        where batchPids.Contains(s.Pid)
+            //        select new
+            //        {
+            //            PartNo = m != null ? m.PartNo : null,   // có thể null nếu không match
+            //            ModelName = m != null ? m.ModelName : null,
+            //            Board = m != null ? m.Board : null,
+            //            Pid = s.Pid
+            //        }
+            //    ).ToListAsync();
 
-                var now = DateTime.Now;
-                long tagId = GenerateTagId();
+            //    AddLog($"[DEBUG] tagDatas.Count: {tagDatas.Count}");
+            //    if (tagDatas.Count == 0)
+            //    {
+            //        ShowDetailStatus("No se encontraron PIDs válidos en el lote actual.");
+            //        //// loại các PID không còn match khỏi batch để tránh lặp vô hạn
+            //        //lock (_pendingLock)
+            //        //{
+            //        //    foreach (var pid in batchPids) _pendingPids.Remove(pid);
+            //        //}
+            //        return;
+            //    }
 
-                //AddLog("Assign data for tag label\r\n");
-                _tagLabel = new ManufacturingTagDto
-                {
-                    ModelName = $"{tagDatas[0].ModelName}-{tagDatas[0].Board}",
-                    Date = now.ToString("dd/MM/yyyy"),
-                    PartNo = tagDatas[0].PartNo,
-                    Quantity = tagDatas.Count,
-                    TagId = tagId,
-                    PidList = tagDatas.Select(x => x.Pid).ToList()
-                };
+            //    var now = DateTime.Now;
+            //    long tagId = GenerateTagId();
 
-                //AddLog("Print\r\n");
-                PrintTag(_tagLabel);
+            //    //AddLog("Assign data for tag label\r\n");
+            //    _tagLabel = new ManufacturingTagDto
+            //    {
+            //        ModelName = $"{tagDatas[0].ModelName}-{tagDatas[0].Board}",
+            //        Date = now.ToString("dd/MM/yyyy"),
+            //        PartNo = tagDatas[0].PartNo,
+            //        Quantity = tagDatas.Count,
+            //        TagId = tagId,
+            //        PidList = tagDatas.Select(x => x.Pid).ToList()
+            //    };
 
-                AddLog($"[DEBUG] Start update database");
-                await db.TbScanOuts
-                    .Where(x => _tagLabel.PidList.Contains(x.Pid))
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(r => r.TagId, r => tagId)
-                        .SetProperty(r => r.PrintAt, r => DateTime.Now)
-                        .SetProperty(r => r.PrintDate, r => DateOnly.FromDateTime(DateTime.Now))
-                    );
-                AddLog($"[DEBUG] Start reset all data");
+            //    //AddLog("Print\r\n");
+            //    PrintTag(_tagLabel);
 
-                resetUI();
+            //    AddLog($"[DEBUG] Start update database");
+            //    await db.TbScanOuts
+            //        .Where(x => _tagLabel.PidList.Contains(x.Pid))
+            //        .ExecuteUpdateAsync(s => s
+            //            .SetProperty(r => r.TagId, r => tagId)
+            //            .SetProperty(r => r.PrintAt, r => DateTime.Now)
+            //            .SetProperty(r => r.PrintDate, r => DateOnly.FromDateTime(DateTime.Now))
+            //        );
+            //    AddLog($"[DEBUG] Start reset all data");
 
-                AddLog($"[DEBUG] Completed! Reset all data");
-            }
-            catch (Exception ex)
-            {
-                AddLog(ex.Message);
-            }
+            //    resetUI();
+
+            //    AddLog($"[DEBUG] Completed! Reset all data");
+            //}
+            //catch (Exception ex)
+            //{
+            //    AddLog(ex.Message);
+            //}
         }
 
         #region Print Setting & Generate label tag
@@ -970,226 +987,619 @@ namespace MSFC
         // đổi mm -> hundredths of an inch (đơn vị của MarginBounds)
         static int MmToHundredths(float mm) => (int)Math.Round(mm / 25.4f * 100f);
 
+        //void PrintTag(ManufacturingTagDto tag)
+        //{
+        //    try
+        //    {
+        //        var doc = new PrintDocument();
+        //        doc.PrinterSettings = new PrinterSettings();
+
+        //        // lấy đúng size 50x25mm từ driver (197x98 hundredths-inch hoặc ngược)
+        //        var ps = doc.PrinterSettings.PaperSizes
+        //            .Cast<PaperSize>()
+        //            .FirstOrDefault(p => Math.Abs(p.Width - 197) < 5 && Math.Abs(p.Height - 98) < 5
+        //                              || Math.Abs(p.Width - 98) < 5 && Math.Abs(p.Height - 197) < 5);
+        //        if (ps != null) doc.DefaultPageSettings.PaperSize = ps;
+
+        //        doc.DefaultPageSettings.Margins = new System.Drawing.Printing.Margins(0, 0, 0, 0);
+        //        doc.OriginAtMargins = true;              // (0,0) = MarginBounds.TopLeft
+        //        doc.DefaultPageSettings.Landscape = false; // nếu bị xoay hãy thử true
+        //        _tagLabel = tag;
+        //        doc.PrintPage += GenerateLabel_FitMarginBounds; // máy in nhiệt tem bóc
+        //        doc.Print();
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        AddLog($"PrintTag: Exception - {ex.Message}\r\n{ex.StackTrace}");
+        //        throw;
+        //    }
+        //}
         void PrintTag(ManufacturingTagDto tag)
         {
-            try
-            {
-                AddLog("PrintTag: Start printing tag.");
-                var doc = new PrintDocument();
-                doc.PrinterSettings = new PrinterSettings();
+            var pd = new PrintDocument();
 
-                // lấy đúng size 50x25mm từ driver (197x98 hundredths-inch hoặc ngược)
-                var ps = doc.PrinterSettings.PaperSizes
-                    .Cast<PaperSize>()
-                    .FirstOrDefault(p => Math.Abs(p.Width - 197) < 5 && Math.Abs(p.Height - 98) < 5
-                                      || Math.Abs(p.Width - 98) < 5 && Math.Abs(p.Height - 197) < 5);
-                if (ps != null) doc.DefaultPageSettings.PaperSize = ps;
+            // (tùy chọn) chọn máy in nếu không dùng default:
+            // pd.PrinterSettings.PrinterName = "EPSON TM-T83";
 
-                doc.DefaultPageSettings.Margins = new System.Drawing.Printing.Margins(0, 0, 0, 0);
-                doc.OriginAtMargins = true;              // (0,0) = MarginBounds.TopLeft
-                doc.DefaultPageSettings.Landscape = false; // nếu bị xoay hãy thử true
-                AddLog("PrintTag: Start generate label...");
-                _tagLabel = tag;
-                doc.PrintPage += GenerateLabel_FitMarginBounds;
+            // Gắn event PrintPage — truyền tag bằng Tag property của PrintDocument
+            pd.PrintPage += (s, e) => printDoc_PrintPage(s, e, tag);
 
-                AddLog("PrintTag: Calling doc.Print()...");
-                doc.Print();
-                AddLog("PrintTag: Print completed.");
-            }
-            catch (Exception ex)
-            {
-                AddLog($"PrintTag: Exception - {ex.Message}\r\n{ex.StackTrace}");
-                throw;
-            }
+            pd.Print();  // ← GỌI IN
         }
-        void GenerateLabel_FitMarginBounds(object sender, PrintPageEventArgs e)
+
+        //private static float MmToPxX(Graphics g, float mm) => (mm / 25.4f) * g.DpiX;
+        //private static float MmToPxY(Graphics g, float mm) => (mm / 25.4f) * g.DpiY;
+
+        //private void GenerateLabel_50x25mm(object? sender, PrintPageEventArgs e)
+        //{
+        //    var g = e.Graphics;
+        //    g.PageUnit = GraphicsUnit.Pixel;
+
+        //    // --- NUDGE: dịch toàn bộ nội dung (mm) ---
+        //    // >0: dịch sang phải/xuống; <0: dịch sang trái/lên
+        //    const float NUDGE_X_MM = 0.0f;   // ví dụ 0.8f để đẩy phải 0.8 mm
+        //    const float NUDGE_Y_MM = 0.0f;   // ví dụ -0.5f để kéo lên 0.5 mm
+
+        //    // Khung tem 50×25mm theo pixel
+        //    float wPx = (50f / 25.4f) * g.DpiX;   // ≈399 @203dpi
+        //    float hPx = (25f / 25.4f) * g.DpiY;   // ≈199 @203dpi
+
+        //    // Neo vào vùng in được (đổi đơn vị về pixel)
+        //    var pa = e.PageSettings.PrintableArea;
+        //    float paLeftPx = (pa.X / 100f) * g.DpiX;
+        //    float paTopPx = (pa.Y / 100f) * g.DpiY;
+
+        //    // Khung tem tại vị trí in
+        //    var rc = new RectangleF(paLeftPx, paTopPx, wPx, hPx);
+
+        //    // --- Chừa mép an toàn (bleed) ---
+        //    float bleedX = (1.0f / 25.4f) * g.DpiX;   // 1mm → px (tùy 0.5–2 mm)
+        //    float bleedY = (1.0f / 25.4f) * g.DpiY;
+
+        //    // Nếu muốn bleed vừa chừa mép vừa "dịch" nhẹ vào trong, có thể coi bleed như offset luôn:
+        //    // var rcSafe = new RectangleF(rc.X + bleedX, rc.Y + bleedY, rc.Width - bleedX*2, rc.Height - bleedY*2);
+        //    // Còn dưới đây là cách cũ: chỉ shrink vùng an toàn, không dịch.
+        //    var rcSafe = RectangleF.Inflate(rc, -bleedX, -bleedY);
+
+        //    // --- Base design size (giữ cố định) ---
+        //    const float BASE_W = 400f; // gần 50mm@203dpi
+        //    const float BASE_H = 200f; // gần 25mm@203dpi
+
+        //    // Tính scale tối đa để nhét BASE_W×BASE_H vào rcSafe
+        //    float s = Math.Min(rcSafe.Width / BASE_W, rcSafe.Height / BASE_H);
+
+        //    // Căn giữa base sau khi scale
+        //    float scaledW = BASE_W * s;
+        //    float scaledH = BASE_H * s;
+        //    float x = rcSafe.X + (rcSafe.Width - scaledW) / 2f;
+        //    float y = rcSafe.Y + (rcSafe.Height - scaledH) / 2f;
+
+        //    // --- ÁP NUDGE (mm -> px) ---
+        //    float nudgeX = MmToPxX(g, NUDGE_X_MM);
+        //    float nudgeY = MmToPxY(g, NUDGE_Y_MM);
+        //    x += nudgeX;
+        //    y += nudgeY;
+
+        //    // (Tuỳ chọn) tinh chỉnh cực nhỏ theo px thay vì mm:
+        //    x += 120f;  // đẩy phải 2 px
+        //    //y -= 1f;  // kéo lên 1 px
+
+        //    // Chất lượng vẽ
+        //    g.SmoothingMode = SmoothingMode.HighQuality;
+        //    g.InterpolationMode = InterpolationMode.NearestNeighbor;
+        //    g.PixelOffsetMode = PixelOffsetMode.Half;
+        //    g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+
+        //    // Lưu state
+        //    var state = g.Save();
+
+        //    // Áp transform trước
+        //    g.TranslateTransform(x, y);
+        //    g.ScaleTransform(s, s);
+
+        //    // TÍNH clip theo "world coords" (đơn vị BASE_W/BASE_H)
+        //    float bleedWorldX = bleedX / s;
+        //    float bleedWorldY = bleedY / s;
+        //    var worldSafe = new RectangleF(
+        //        bleedWorldX,
+        //        bleedWorldY,
+        //        BASE_W - 2 * bleedWorldX,
+        //        BASE_H - 2 * bleedWorldY
+        //    );
+
+        //    // Đặt clip SAU transform để nó đi cùng nudge/scale
+        //    g.SetClip(worldSafe);
+
+        //    // Vẽ theo base
+        //    DrawTag_DesignUnits(g, BASE_W, BASE_H, _tagLabel);
+
+        //    // Khôi phục lại state (clip + transform)
+        //    g.Restore(state);
+
+        //    e.HasMorePages = false;
+        //}
+
+
+
+
+        //void GenerateLabel_FitMarginBounds(object sender, PrintPageEventArgs e)
+        //{
+        //    var g = e.Graphics;
+        //    // Canvas thiết kế theo đơn vị 1/100 inch (giống PrintTagTest)
+        //    float designW = 197f; // ~50mm
+        //    float designH = 98f;  // ~25mm
+
+        //    // Vùng in thật driver cho phép
+        //    var dest = e.MarginBounds;
+        //    // >>> ÁP OFFSET Ở ĐÂY <<<
+        //    int offX = MmToHundredths(_offsetXmm);
+        //    int offY = MmToHundredths(_offsetYmm);
+
+        //    // dịch rect theo offset; clamp nhẹ cho an toàn
+        //    dest = new Rectangle(
+        //        dest.Left + offX,
+        //        dest.Top + offY,
+        //        dest.Width,
+        //        dest.Height
+        //    );
+        //    // Ép full theo từng trục (không chừa trắng)
+        //    float scaleX = dest.Width / designW;
+        //    float scaleY = dest.Height / designH;
+
+        //    // Gốc tại góc trên-trái của vùng in
+        //    g.TranslateTransform(dest.Left, dest.Top);
+        //    g.ScaleTransform(scaleX, scaleY);
+
+        //    // Vẽ theo "design space" 0..designW x 0..designH
+        //    DrawTag_DesignUnits(g, designW, designH, _tagLabel);
+
+        //    e.HasMorePages = false;
+        //}
+        ///// <summary>
+        ///// Vẽ nội dung tem theo "design units" (1/100 inch), ví dụ W≈197, H≈98 cho tem 50x25mm.
+        ///// Không phụ thuộc DPI vì phần gọi đã scale-fit vào e.MarginBounds.
+        ///// </summary>
+        ////void DrawTag_DesignUnits(Graphics g, float W, float H, ManufacturingTagDto tag)
+        ////{
+        ////    // ———————————————————————————————————————————————————————————
+        ////    // 1) KHUNG & THAM SỐ BỐ CỤC CƠ BẢN
+        ////    // ———————————————————————————————————————————————————————————
+
+        ////    using var pen = new Pen(Color.Black, 1);
+        ////    //g.DrawRectangle(pen, 0, 0, W - 1, H - 1);   // khung ngoài mỏng
+
+        ////    // Giảm margin: cho hiển thị nhiều nội dung hơn
+        ////    float padX = W * 0.02f;   // ~2% bề rộng
+        ////    float padY = H * 0.02f;   // ~6% bề cao
+
+        ////    // Chia cột: 72% cho text, 28% cho QR (QR nhỏ lại)
+        ////    float leftW = W * 0.72f;
+        ////    float rightW = W - leftW;
+
+        ////    // Đường chia cột (chỉ để tách thị giác, có thể bỏ nếu muốn)
+        ////    g.DrawLine(pen, leftW, padY, leftW, H - padY);
+
+        ////    // Font chữ: Arial Narrow giúp chứa nhiều ký tự hơn trong bề ngang nhỏ
+        ////    using var fTitle = new Font("Segoe UI", 12, FontStyle.Bold, GraphicsUnit.Point);
+        ////    using var fBody = new Font("Arial Narrow", 9, FontStyle.Regular, GraphicsUnit.Point);
+        ////    using var fQtyStyle = new Font("Segoe UI", 12, FontStyle.Bold, GraphicsUnit.Point);
+
+        ////    // ———————————————————————————————————————————————————————————
+        ////    // 2) TIÊU ĐỀ
+        ////    // ———————————————————————————————————————————————————————————
+        ////    // Chiều cao tiêu đề ~20% tấm tem để còn chỗ cho text
+        ////    var titleRect = new RectangleF(padX, padY, leftW - padX * 2, H * 0.20f);
+        ////    var sfn = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
+        ////    g.DrawString(FormatEbr(tag?.PartNo), fTitle, Brushes.Black, titleRect, sfn);
+
+        ////    // ———————————————————————————————————————————————————————————
+        ////    // 3) KHỐI TEXT 3 DÒNG (Model/Date/P-No) – dạng: "Label (Value)"
+        ////    //    Dùng DrawFitText để tự co cỡ chữ nếu quá dài, đảm bảo không bị cắt.
+        ////    // ———————————————————————————————————————————————————————————
+        ////    float yStart = titleRect.Bottom + H * 0.015f;  // một chút khoảng cách dưới tiêu đề
+        ////    float textH = (H - padY) - yStart;            // khoảng cao còn lại cho text
+        ////    float lineH = textH / 3f;                     // 3 dòng đều nhau
+        ////    var textW = leftW - padX * 2;               // bề ngang khối text
+
+        ////    // Ghép chuỗi theo yêu cầu:
+        ////    string line1 = $"{tag?.ModelName ?? string.Empty}";
+        ////    string line2 = $"Día {tag?.Date ?? string.Empty}";           // dạng DD/MM/YYYY
+        ////    string line3 = $"Cantidad {tag?.Quantity.ToString() ?? string.Empty}";
+
+        ////    // Vẽ từng dòng, tự co text để vừa khung
+        ////    DrawFitText(g, line1, fBody, Brushes.Black, new RectangleF(padX, yStart + 0 * lineH, textW, lineH), 6.0f);
+        ////    DrawFitText(g, line2, fBody, Brushes.Black, new RectangleF(padX, yStart + 1 * lineH, textW, lineH), 6.0f);
+        ////    DrawFitText(g, line3, fQtyStyle, Brushes.Black, new RectangleF(padX, yStart + 2 * lineH, textW, lineH), 6.0f);
+
+        ////    // ———————————————————————————————————————————————————————————
+        ////    // 4) QR CODE (NHỎ LẠI)
+        ////    // ———————————————————————————————————————————————————————————
+        ////    // Ô chứa QR nằm trong cột phải, chừa ít padding để QR nhỏ gọn hơn
+        ////    float rightPad = Math.Min(W * 0.01f, rightW * 0.05f); // padding size
+        ////    float qrBoxW = rightW - rightPad * 2;
+        ////    float qrBoxH = H - padY * 2;
+
+        ////    // Giữ ô vuông => side = min(w, h), và giảm bớt ~15% cho nhỏ hơn
+        ////    float side = Math.Min(qrBoxW, qrBoxH) * 1f; // qr code size 
+        ////    float qrX = leftW + (rightW - side) / 2f;
+        ////    float qrY = padY + (qrBoxH - side) / 2f;
+
+        ////    // Tạo QR: nhớ null-safe cho TagId
+        ////    using var qr = GenerateQRCode(tag?.TagId.ToString() ?? "-", 300); // hoặc (int)Math.Round(g.DpiX)
+        ////    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor; // để pixel QR sắc nét
+        ////    g.DrawImage(qr, new RectangleF(qrX, qrY, side, side));
+        ////}
+
+        //void DrawTag_DesignUnits(Graphics g, float W, float H, ManufacturingTagDto tag)
+        //{
+        //    // ———————————————————————————————————————————————————————————
+        //    // 1) KHUNG & THAM SỐ BỐ CỤC CƠ BẢN
+        //    // ———————————————————————————————————————————————————————————
+        //    using var pen = new Pen(Color.Black, 1);
+        //    g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit; // hợp thermal
+
+        //    // Margin nhỏ để có nhiều chỗ hơn
+        //    float padX = W * 0.02f;
+        //    float padY = H * 0.02f;
+
+        //    // Cột trái & phải (QR nhỏ lại)
+        //    float leftW = W * 0.72f;
+        //    float rightW = W - leftW;
+
+        //    // Vạch chia cột (nếu cần)
+        //    g.DrawLine(pen, leftW, padY, leftW, H - padY);
+
+        //    // Font
+        //    using var fTitle = new Font("Segoe UI", 12, FontStyle.Bold, GraphicsUnit.Point);
+        //    using var fBody = new Font("Arial Narrow", 9, FontStyle.Regular, GraphicsUnit.Point);
+        //    using var fBodyBold = new Font("Arial Narrow", 9, FontStyle.Bold, GraphicsUnit.Point);
+        //    using var fQtyStyle = new Font("Segoe UI", 12, FontStyle.Bold, GraphicsUnit.Point);
+
+        //    // ———————————————————————————————————————————————————————————
+        //    // 2) TIÊU ĐỀ
+        //    // ———————————————————————————————————————————————————————————
+        //    var titleRect = new RectangleF(padX, padY, leftW - padX * 2, H * 0.18f); // ~18% chiều cao cho title
+        //    var sfn = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
+        //    g.DrawString(FormatEbr(tag?.PartNo), fTitle, Brushes.Black, titleRect, sfn);
+
+        //    // ———————————————————————————————————————————————————————————
+        //    // 3) KHỐI TEXT N DÒNG (linh hoạt)
+        //    //    Bạn muốn thêm 3 dòng: Model Name:, Inspection 1:, Inspector 2:
+        //    //    Mình giữ lại Día & Cantidad như hiện tại.
+        //    // ———————————————————————————————————————————————————————————
+        //    float yStart = titleRect.Bottom + H * 0.012f;
+        //    float textH = (H - padY) - yStart;
+        //    float textW = leftW - padX * 2;
+
+        //    // Tạo danh sách dòng (text + font). Dòng Quantity mình để font đậm như trước.
+        //    var lines = new (string text, Font font)[]
+        //    {
+        //        ($"Modelo: {tag?.ModelName ?? string.Empty}", fBodyBold),
+        //        ($"Pieza: {FormatEbr(tag?.PartNo) ?? string.Empty}", fBodyBold),
+        //        ($"Día {tag?.Date ?? string.Empty}",               fBody),
+        //        ($"Cantidad {tag?.Quantity.ToString() ?? string.Empty}", fQtyStyle),
+        //        ($"Inspection 1: {tag?.Inspector1 ?? string.Empty}", fBody),
+        //        ($"Inspector 2: {tag?.Inspector2 ?? string.Empty}", fBody),
+        //        // (tuỳ chọn) nếu muốn thêm P-No/WO… thì thêm vào đây
+        //        // ($"P-No {tag?.PartNo ?? string.Empty}", fBody),
+        //        // ($"WO {tag?.WorkOrder ?? string.Empty}", fBody),
+        //    };
+
+        //    // Vẽ các dòng, mỗi dòng chiếm phần bằng nhau trong textH
+        //    int n = lines.Length;
+        //    float lineH = textH / Math.Max(1, n);
+        //    for (int i = 0; i < n; i++)
+        //    {
+        //        var (text, font) = lines[i];
+        //        var rect = new RectangleF(padX, yStart + i * lineH, textW, lineH);
+        //        DrawFitText(g, text, font, Brushes.Black, rect, minPointSize: 6.0f);
+        //    }
+
+        //    // ———————————————————————————————————————————————————————————
+        //    // 4) QR CODE (cột phải)
+        //    // ———————————————————————————————————————————————————————————
+        //    float rightPad = Math.Min(W * 0.01f, rightW * 0.05f);
+        //    float qrBoxW = rightW - rightPad * 2;
+        //    float qrBoxH = H - padY * 2;
+
+        //    // Giữ hình vuông; tuỳ máy in có thể giảm thêm nếu text dài
+        //    float side = Math.Min(qrBoxW, qrBoxH) * 0.95f; // bớt 5% cho thoáng
+        //    float qrX = leftW + (rightW - side) / 2f;
+        //    float qrY = padY + (qrBoxH - side) / 2f;
+
+        //    using var qr = GenerateQRCode(tag?.TagId.ToString() ?? "-", 300);
+        //    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+        //    g.DrawImage(qr, new RectangleF(qrX, qrY, side, side));
+        //}
+
+
+        ///// <summary>
+        ///// Vẽ text vào khung và TỰ GIẢM cỡ chữ (Point) để vừa chiều cao.
+        ///// Không wrap. Nếu vẫn không vừa ở cỡ tối thiểu -> vẽ với ellipsis.
+        ///// </summary>
+        ///// <param name="g">Graphics hiện tại</param>
+        ///// <param name="text">Chuỗi cần vẽ</param>
+        ///// <param name="baseFont">Font gốc (lấy họ chữ & style)</param>
+        ///// <param name="brush">Màu bút</param>
+        ///// <param name="rect">Khung cần vẽ</param>
+        ///// <param name="minPointSize">Cỡ chữ nhỏ nhất cho phép</param>
+        //static void DrawFitText(Graphics g, string text, Font baseFont, Brush brush, RectangleF rect, float minPointSize = 6.0f)
+        //{
+        //    // Không xuống dòng; nếu dài quá sẽ xử lý bằng cách giảm cỡ chữ/ellipsis
+        //    var fmt = new StringFormat
+        //    {
+        //        Alignment = StringAlignment.Near,
+        //        LineAlignment = StringAlignment.Center,
+        //        Trimming = StringTrimming.EllipsisCharacter,
+        //        FormatFlags = StringFormatFlags.NoWrap
+        //    };
+
+        //    // Thử giảm dần từ cỡ hiện tại đến min
+        //    for (float sz = baseFont.Size; sz >= minPointSize; sz -= 0.5f)
+        //    {
+        //        using var f = new Font(baseFont.FontFamily, sz, baseFont.Style, GraphicsUnit.Point);
+        //        // MeasureString với width giới hạn để ước lượng có vừa chiều cao không
+        //        var measured = g.MeasureString(text, f, (int)Math.Ceiling(rect.Width), fmt);
+
+        //        if (measured.Height <= rect.Height + 0.5f)
+        //        {
+        //            g.DrawString(text, f, brush, rect, fmt);
+        //            return;
+        //        }
+        //    }
+
+        //    // Fallback: cỡ min + ellipsis
+        //    using var fMin = new Font(baseFont.FontFamily, minPointSize, baseFont.Style, GraphicsUnit.Point);
+        //    g.DrawString(text, fMin, brush, rect, fmt);
+        //}
+
+        ///// <summary>
+        ///// Định dạng EBR để hiển thị: 
+        ///// "EBR12345678" → "EBR 1234 5678"
+        ///// Nếu không đúng pattern thì giữ nguyên.
+        ///// </summary>
+        //static string FormatEbr(string input)
+        //{
+        //    if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+
+        //    input = input.Trim().ToUpperInvariant();
+
+        //    // Nếu bắt đầu bằng EBR và có ít nhất 9 ký tự
+        //    if (input.StartsWith("EBR") && input.Length > 7)
+        //    {
+        //        string prefix = input.Substring(0, 3); // "EBR"
+        //        string rest = input.Substring(3);
+
+        //        // Cắt thành block 4-4
+        //        if (rest.Length >= 8)
+        //        {
+        //            string part1 = rest.Substring(0, 4);
+        //            string part2 = rest.Substring(4, Math.Min(4, rest.Length - 4));
+        //            return $"{prefix} {part1} {part2}";
+        //        }
+        //        else if (rest.Length >= 4)
+        //        {
+        //            string part1 = rest.Substring(0, 4);
+        //            string part2 = rest.Substring(4);
+        //            return $"{prefix} {part1} {part2}";
+        //        }
+        //    }
+
+        //    return input;
+        //}
+
+
+        /// <summary>
+        /// In theo máy in EPSON TM-T83
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+
+        void printDoc_PrintPage(object? sender, PrintPageEventArgs e, ManufacturingTagDto tag)
         {
             var g = e.Graphics;
+            g.PageUnit = GraphicsUnit.Pixel;
 
-            // KHÔNG bù hard margins khi đã dùng OriginAtMargins + MarginBounds
-            // g.TranslateTransform(-e.PageSettings.HardMarginX, -e.PageSettings.HardMarginY); // ❌ bỏ
+            // Lấy vùng in được
+            var pa = e.PageSettings.PrintableArea;
 
-            // Canvas thiết kế theo đơn vị 1/100 inch (giống PrintTagTest)
-            float designW = 197f; // ~50mm
-            float designH = 98f;  // ~25mm
+            // Chuyển mm → pixel theo DPI hiện tại
+            float Wpx = MmToPx(g.DpiX, 80f);   // bề ngang 80mm (chuẩn khổ 80)
+            float Hpx = MmToPx(g.DpiY, 60f);   // chiều cao tem 60mm (tuỳ bạn)
 
-            // Vùng in thật driver cho phép
-            var dest = e.MarginBounds;
-            // >>> ÁP OFFSET Ở ĐÂY <<<
-            int offX = MmToHundredths(_offsetXmm);
-            int offY = MmToHundredths(_offsetYmm);
+            // Vẽ trong khung in
+            float x = pa.X;   // in sát lề in được
+            float y = pa.Y;
 
-            // dịch rect theo offset; clamp nhẹ cho an toàn
-            dest = new Rectangle(
-                dest.Left + offX,
-                dest.Top + offY,
-                dest.Width,
-                dest.Height
-            );
-            // Ép full theo từng trục (không chừa trắng)
-            float scaleX = dest.Width / designW;
-            float scaleY = dest.Height / designH;
+            DrawTag_DesignUnits_TM83(g, Wpx, Hpx, tag);
 
-            // Gốc tại góc trên-trái của vùng in
-            g.TranslateTransform(dest.Left, dest.Top);
-            g.ScaleTransform(scaleX, scaleY);
-
-            // Vẽ theo "design space" 0..designW x 0..designH
-            DrawTag_DesignUnits(g, designW, designH, _tagLabel);
-
+            // Nếu là receipt cuộn và bạn muốn in một tem mỗi trang:
             e.HasMorePages = false;
         }
-        /// <summary>
-        /// Vẽ nội dung tem theo "design units" (1/100 inch), ví dụ W≈197, H≈98 cho tem 50x25mm.
-        /// Không phụ thuộc DPI vì phần gọi đã scale-fit vào e.MarginBounds.
-        /// </summary>
-        void DrawTag_DesignUnits(Graphics g, float W, float H, ManufacturingTagDto tag)
+
+        static float MmToPx(float dpi, float mm) => (mm / 25.4f) * dpi;
+        static void DrawTag_DesignUnits_TM83(Graphics g, float W, float H, ManufacturingTagDto tag)
         {
-            // ———————————————————————————————————————————————————————————
-            // 1) KHUNG & THAM SỐ BỐ CỤC CƠ BẢN
-            // ———————————————————————————————————————————————————————————
+            // ====== Khuyến nghị cho thermal ======
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
+            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
 
             using var pen = new Pen(Color.Black, 1);
-            //g.DrawRectangle(pen, 0, 0, W - 1, H - 1);   // khung ngoài mỏng
 
-            // Giảm margin: cho hiển thị nhiều nội dung hơn
-            float padX = W * 0.02f;   // ~2% bề rộng
-            float padY = H * 0.06f;   // ~6% bề cao
+            // Lề nhỏ để tối đa nội dung
+            float padX = W * 0.03f;   // ~3% bề rộng
+            float padY = H * 0.03f;   // ~3% bề cao
 
-            // Chia cột: 72% cho text, 28% cho QR (QR nhỏ lại)
-            float leftW = W * 0.72f;
+            // Cột trái/ phải: receipt hẹp -> 74% text / 26% QR
+            float leftW = W * 0.74f;
             float rightW = W - leftW;
 
-            // Đường chia cột (chỉ để tách thị giác, có thể bỏ nếu muốn)
+            // Vạch ngăn cột cho dễ nhìn (có thể bỏ)
             g.DrawLine(pen, leftW, padY, leftW, H - padY);
 
-            // Font chữ: Arial Narrow giúp chứa nhiều ký tự hơn trong bề ngang nhỏ
-            using var fTitle = new Font("Segoe UI", 12, FontStyle.Bold, GraphicsUnit.Point);
-            using var fBody = new Font("Arial Narrow", 9, FontStyle.Regular, GraphicsUnit.Point);
-            using var fQtyStyle = new Font("Segoe UI", 12, FontStyle.Bold, GraphicsUnit.Point);
+            // Font chọn cho thermal (đậm vừa, hẹp ngang)
+            using var fTitle = new Font("Segoe UI", 20, FontStyle.Bold, GraphicsUnit.Point);
+            using var fBody = new Font("Segoe UI", 14, FontStyle.Regular, GraphicsUnit.Point);
+            using var fBodyBold = new Font("Segoe UI", 11, FontStyle.Bold, GraphicsUnit.Point);
+            using var fQtyStyle = new Font("Segoe UI", 14, FontStyle.Bold, GraphicsUnit.Point);
+            using var fInspector = new Font("Segoe UI", 11, FontStyle.Regular, GraphicsUnit.Point);
+            // ====== Header (Pieza / PartNo đã nhóm 3 ký tự) ======
+            string pieza = $"{GroupPartNoHuman(tag?.PartNo ?? string.Empty)}";
+            var sfnL = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
 
-            // ———————————————————————————————————————————————————————————
-            // 2) TIÊU ĐỀ
-            // ———————————————————————————————————————————————————————————
-            // Chiều cao tiêu đề ~20% tấm tem để còn chỗ cho text
-            var titleRect = new RectangleF(padX, padY, leftW - padX * 2, H * 0.20f);
-            var sfn = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
-            g.DrawString(FormatEbr(tag?.PartNo), fTitle, Brushes.Black, titleRect, sfn);
+            // Chiều cao title ~15% tem
+            var titleRect = new RectangleF(padX, padY, leftW - padX * 2, H * 0.15f);
+            DrawFitText(g, pieza, fTitle, Brushes.Black, titleRect, 7f);
 
-            // ———————————————————————————————————————————————————————————
-            // 3) KHỐI TEXT 3 DÒNG (Model/Date/P-No) – dạng: "Label (Value)"
-            //    Dùng DrawFitText để tự co cỡ chữ nếu quá dài, đảm bảo không bị cắt.
-            // ———————————————————————————————————————————————————————————
-            float yStart = titleRect.Bottom + H * 0.015f;  // một chút khoảng cách dưới tiêu đề
-            float textH = (H - padY) - yStart;            // khoảng cao còn lại cho text
-            float lineH = textH / 3f;                     // 3 dòng đều nhau
-            var textW = leftW - padX * 2;               // bề ngang khối text
+            // ====== Khối nội dung N dòng (linh hoạt) ======
+            float yStart = titleRect.Bottom + (H * 0.01f);
+            float textH = (H - padY) - yStart;
+            float textW = leftW - padX * 2;
 
-            // Ghép chuỗi theo yêu cầu:
-            string line1 = $"{tag?.ModelName ?? string.Empty}";
-            string line2 = $"Día {tag?.Date ?? string.Empty}";           // dạng DD/MM/YYYY
-            string line3 = $"Cantidad {tag?.Quantity.ToString() ?? string.Empty}";
+            // Date format dd/MM/yyyy (đổi theo ý)
+            string dia = SafeDateDMY(tag?.Date);
 
-            // Vẽ từng dòng, tự co text để vừa khung
-            DrawFitText(g, line1, fBody, Brushes.Black, new RectangleF(padX, yStart + 0 * lineH, textW, lineH), 6.0f);
-            DrawFitText(g, line2, fBody, Brushes.Black, new RectangleF(padX, yStart + 1 * lineH, textW, lineH), 6.0f);
-            DrawFitText(g, line3, fQtyStyle, Brushes.Black, new RectangleF(padX, yStart + 2 * lineH, textW, lineH), 6.0f);
-
-            // ———————————————————————————————————————————————————————————
-            // 4) QR CODE (NHỎ LẠI)
-            // ———————————————————————————————————————————————————————————
-            // Ô chứa QR nằm trong cột phải, chừa ít padding để QR nhỏ gọn hơn
-            float rightPad = Math.Min(W * 0.01f, rightW * 0.05f); // padding size
-            float qrBoxW = rightW - rightPad * 2;
-            float qrBoxH = H - padY * 2;
-
-            // Giữ ô vuông => side = min(w, h), và giảm bớt ~15% cho nhỏ hơn
-            float side = Math.Min(qrBoxW, qrBoxH) * 1f; // qr code size 
-            float qrX = leftW + (rightW - side) / 2f;
-            float qrY = padY + (qrBoxH - side) / 2f;
-
-            // Tạo QR: nhớ null-safe cho TagId
-            using var qr = GenerateQRCode(tag?.TagId.ToString() ?? "-", 300); // hoặc (int)Math.Round(g.DpiX)
-            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor; // để pixel QR sắc nét
-            g.DrawImage(qr, new RectangleF(qrX, qrY, side, side));
-        }
-
-        /// <summary>
-        /// Vẽ text vào khung và TỰ GIẢM cỡ chữ (Point) để vừa chiều cao.
-        /// Không wrap. Nếu vẫn không vừa ở cỡ tối thiểu -> vẽ với ellipsis.
-        /// </summary>
-        /// <param name="g">Graphics hiện tại</param>
-        /// <param name="text">Chuỗi cần vẽ</param>
-        /// <param name="baseFont">Font gốc (lấy họ chữ & style)</param>
-        /// <param name="brush">Màu bút</param>
-        /// <param name="rect">Khung cần vẽ</param>
-        /// <param name="minPointSize">Cỡ chữ nhỏ nhất cho phép</param>
-        static void DrawFitText(Graphics g, string text, Font baseFont, Brush brush, RectangleF rect, float minPointSize = 6.0f)
-        {
-            // Không xuống dòng; nếu dài quá sẽ xử lý bằng cách giảm cỡ chữ/ellipsis
-            var fmt = new StringFormat
+            var lines = new (string text, Font font)[]
             {
-                Alignment = StringAlignment.Near,
-                LineAlignment = StringAlignment.Center,
-                Trimming = StringTrimming.EllipsisCharacter,
-                FormatFlags = StringFormatFlags.NoWrap
+                ($"{tag?.ModelName ?? string.Empty}", fBodyBold),
+                ($"Día {dia}", fBody),
+                ($"Cantidad {tag?.Quantity.ToString() ?? string.Empty}", fQtyStyle),
+                ($"1: {tag?.Inspector1 ?? string.Empty}", fInspector),
+                ($"2: {tag?.Inspector2 ?? string.Empty}", fInspector),
             };
 
-            // Thử giảm dần từ cỡ hiện tại đến min
-            for (float sz = baseFont.Size; sz >= minPointSize; sz -= 0.5f)
-            {
-                using var f = new Font(baseFont.FontFamily, sz, baseFont.Style, GraphicsUnit.Point);
-                // MeasureString với width giới hạn để ước lượng có vừa chiều cao không
-                var measured = g.MeasureString(text, f, (int)Math.Ceiling(rect.Width), fmt);
+            int n = lines.Length;
+            float lineH = textH / n; // chia đều
 
-                if (measured.Height <= rect.Height + 0.5f)
+            for (int i = 0; i < n; i++)
+            {
+                var (text, font) = lines[i];
+                var rect = new RectangleF(padX, yStart + i * lineH, textW, lineH);
+                DrawFitText(g, text, font, Brushes.Black, rect, 6f);
+            }
+            // ====== Barcode dọc bên phải ======
+            float rightPad = Math.Min(W * 0.02f, rightW * 0.10f);
+            float slotW = rightW - rightPad * 2;  // bề rộng KHUNG chứa barcode theo trục X
+            float slotH = H - padY * 2;           // bề cao KHUNG chứa barcode theo trục Y
+
+            // tạo barcode dựa trên SLOT mà chưa xoay
+            using var bc = GenerateBarcode(tag?.TagId.ToString() ?? "-", (int)slotH, (int)slotW);
+            // chú ý: width=slotH & height=slotW để sau xoay nó "đứng" đúng tỉ lệ
+
+            // xoay 90 độ
+            bc.RotateFlip(RotateFlipType.Rotate90FlipNone);
+            var bW = bc.Width;
+            var bH = bc.Height;
+
+            // canh giữa KHUNG phải
+            float bX = leftW + (rightW - bW) / 2f;
+            float bY = padY + (slotH - bH) / 2f;
+
+            // in barcode
+            g.DrawImage(bc, bX, bY, bW, bH);
+
+
+        }
+        static string GroupEvery3(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            var sb = new StringBuilder(s.Length + s.Length / 3);
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (i > 0 && i % 3 == 0) sb.Append(' ');
+                sb.Append(s[i]);
+            }
+            return sb.ToString();
+        }
+        static string GroupPartNoHuman(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+
+            // 1) Tách prefix chữ cái ở đầu (A-Z)
+            int i = 0;
+            while (i < s.Length && char.IsLetter(s[i])) i++;
+            string prefix = s.Substring(0, i);
+            string rest = s.Substring(i);
+
+            // 2) Group phần còn lại mỗi 4 ký tự từ trái sang
+            var sb = new StringBuilder();
+            for (int k = 0; k < rest.Length; k++)
+            {
+                if (k > 0 && k % 4 == 0)
+                    sb.Append(' ');
+                sb.Append(rest[k]);
+            }
+
+            // 3) Ghép lại
+            if (string.IsNullOrEmpty(prefix))
+                return sb.ToString();
+
+            return prefix + " " + sb.ToString();
+        }
+
+        static string SafeDateDMY(string? s)
+        {
+            if (DateTime.TryParse(s, out var d))
+                return d.ToString("dd/MM/yyyy");
+            return s ?? string.Empty;
+        }
+
+        static void DrawFitText(Graphics g, string text, Font baseFont, Brush brush, RectangleF rect, float minPointSize = 6f)
+        {
+            using var format = new StringFormat(StringFormat.GenericTypographic)
+            {
+                FormatFlags = StringFormatFlags.LineLimit,
+                Trimming = StringTrimming.EllipsisCharacter
+            };
+            float size = baseFont.Size;
+            while (size >= minPointSize)
+            {
+                using var f = new Font(baseFont.FontFamily, size, baseFont.Style, GraphicsUnit.Point);
+                var sz = g.MeasureString(text, f, (SizeF)rect.Size, format);
+                if (sz.Height <= rect.Height && sz.Width <= rect.Width)
                 {
-                    g.DrawString(text, f, brush, rect, fmt);
+                    g.DrawString(text, f, brush, rect, format);
                     return;
                 }
+                size -= 0.5f;
             }
-
-            // Fallback: cỡ min + ellipsis
             using var fMin = new Font(baseFont.FontFamily, minPointSize, baseFont.Style, GraphicsUnit.Point);
-            g.DrawString(text, fMin, brush, rect, fmt);
+            g.DrawString(text, fMin, brush, rect, format);
         }
-
-        /// <summary>
-        /// Định dạng EBR để hiển thị: 
-        /// "EBR12345678" → "EBR 1234 5678"
-        /// Nếu không đúng pattern thì giữ nguyên.
-        /// </summary>
-        static string FormatEbr(string input)
+        static Bitmap Rotate(Bitmap src, RotateFlipType rotate)
         {
-            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
-
-            input = input.Trim().ToUpperInvariant();
-
-            // Nếu bắt đầu bằng EBR và có ít nhất 9 ký tự
-            if (input.StartsWith("EBR") && input.Length > 7)
-            {
-                string prefix = input.Substring(0, 3); // "EBR"
-                string rest = input.Substring(3);
-
-                // Cắt thành block 4-4
-                if (rest.Length >= 8)
-                {
-                    string part1 = rest.Substring(0, 4);
-                    string part2 = rest.Substring(4, Math.Min(4, rest.Length - 4));
-                    return $"{prefix} {part1} {part2}";
-                }
-                else if (rest.Length >= 4)
-                {
-                    string part1 = rest.Substring(0, 4);
-                    string part2 = rest.Substring(4);
-                    return $"{prefix} {part1} {part2}";
-                }
-            }
-
-            return input;
+            src.RotateFlip(rotate);
+            return src;
         }
-
-
+        static Bitmap GenerateBarcode(string text, int width, int height)
+        {
+            var writer = new BarcodeWriterPixelData
+            {
+                Format = BarcodeFormat.CODE_128,
+                Options = new EncodingOptions
+                {
+                    Height = height,
+                    Width = width,
+                    Margin = 0,
+                    PureBarcode = true
+                }
+            };
+            var pixelData = writer.Write(text ?? "-");
+            var bmp = new Bitmap(pixelData.Width, pixelData.Height, PixelFormat.Format32bppArgb);
+            var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
+                                    ImageLockMode.WriteOnly, bmp.PixelFormat);
+            try
+            {
+                System.Runtime.InteropServices.Marshal.Copy(pixelData.Pixels, 0, data.Scan0, pixelData.Pixels.Length);
+            }
+            finally
+            {
+                bmp.UnlockBits(data);
+            }
+            return bmp;
+        }
         private Bitmap GenerateQRCode(string value, int preferDpi = 300) //Qrcode
         {
             var gen = new QRCodeGenerator();
@@ -1204,19 +1614,6 @@ namespace MSFC
         #endregion
 
 
-        private void fpnScanData_ControlAdded(object sender, ControlEventArgs e)
-        {
-            HighlightFlash(e.Control, Color.Khaki, 5000); // 800 ms
-        }
-        void HighlightFlash(Control c, Color flashColor, int durationMs = 800)
-        {
-            var orig = c.BackColor;
-            c.BackColor = flashColor;
-
-            var t = new System.Windows.Forms.Timer { Interval = durationMs };
-            t.Tick += (_, __) => { t.Stop(); t.Dispose(); c.BackColor = orig; };
-            t.Start();
-        }
 
 
 
@@ -1428,8 +1825,8 @@ namespace MSFC
 
         private async Task LoopAsync(CancellationToken ct)
         {
-            const int idleDelayMs = 100;
-            const int busyDelayMs = 40; // nhạy hơn chút
+            const int idleDelayMs = 50;
+            const int busyDelayMs = 10; // nhạy hơn chút
 
             while (!ct.IsCancellationRequested)
             {
@@ -1454,32 +1851,17 @@ namespace MSFC
 
                         string result = Normalize(_automationService2.SafeGetText(_resultEl));
 
-                        // nếu null/empty bất thường -> thử refresh handle 1 lần
-                        if (string.IsNullOrEmpty(pid) && string.IsNullOrEmpty(result))
-                        {
-                            InvalidateHandlesIfNulls();
-                            pid = Normalize(_automationService2.SafeGetText(_pidEl));
-                            result = Normalize(_automationService2.SafeGetText(_resultEl));
-                            inner.Append("[refreshed] ");
-                        }
+                        //// nếu null/empty bất thường -> thử refresh handle 1 lần
+                        //if (string.IsNullOrEmpty(pid) && string.IsNullOrEmpty(result))
+                        //{
+                        //    InvalidateHandlesIfNulls();
+                        //    pid = Normalize(_automationService2.SafeGetText(_pidEl));
+                        //    result = Normalize(_automationService2.SafeGetText(_resultEl));
+                        //    inner.Append("[refreshed] ");
+                        //}
 
                         return (pid, result);
                     }).ConfigureAwait(false);
-
-                    //// retry siêu ngắn nếu bị spike
-                    //if (sw.ElapsedMilliseconds > 120)
-                    //{
-                    //    var swRetry = Stopwatch.StartNew();
-                    //    head = await _uiaWorker.Run(() =>
-                    //    {
-                    //        string pid2 = Normalize(_automationService2.SafeGetText(_pidEl));
-                    //        string result2 = Normalize(_automationService2.SafeGetText(_resultEl));
-                    //        return (pid2, result2);
-                    //    });
-                    //    swRetry.Stop();
-                    //    AddLog($"Read UI (head) RETRY:{swRetry.ElapsedMilliseconds}");
-                    //}
-
 
 
                     if (string.IsNullOrWhiteSpace(head.pid))
@@ -1491,25 +1873,24 @@ namespace MSFC
 
                     // Dedup sớm
                     var resClean = Normalize(head.result);
-                    if (string.Equals(head.pid, _lastPidValue, StringComparison.OrdinalIgnoreCase) &&
-                        string.Equals(resClean, _lastStatusValue, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(head.pid, _lastPidValue, StringComparison.OrdinalIgnoreCase) && string.Equals(resClean, _lastStatusValue, StringComparison.OrdinalIgnoreCase))
                     {
                         _building = false;
                         await Task.Delay(idleDelayMs, ct).ConfigureAwait(false);
                         continue;
                     }
 
-                    // ===================== 2) DEBOUNCE NHẸ (nếu chưa OK) =====================
-                    if (Classify(resClean) != ResultKind.Ok)
-                    {
-                        var confirmed = await WaitStableOkAsync(maxTries: 2, delayMs: 60, ct);
-                        if (confirmed != null)
-                        {
-                            // cập nhật theo snapshot OK
-                            resClean = Normalize(confirmed.Result);
-                            head = (head.pid, resClean);
-                        }
-                    }
+                    //// ===================== 2) DEBOUNCE NHẸ (nếu chưa OK) =====================
+                    //if (Classify(resClean) != ResultKind.Ok)
+                    //{
+                    //    var confirmed = await WaitStableOkAsync(maxTries: 2, delayMs: 60, ct);
+                    //    if (confirmed != null)
+                    //    {
+                    //        // cập nhật theo snapshot OK
+                    //        resClean = Normalize(confirmed.Result);
+                    //        head = (head.pid, resClean);
+                    //    }
+                    //}
 
                     // ===================== 1B) ĐỌC SÂU KHI CẦN =====================
                     // Chỉ đọc EBR/WO/Progress… khi đã chắc chắn có thay đổi PID/Result.
@@ -1544,6 +1925,13 @@ namespace MSFC
                         Progress = tail.prog
                     };
 
+                    // Nếu là hàng đã scanout rồi thì coi như là OK
+                    if (Classify(resClean) == ResultKind.Ng && data.Message.Contains("Already Shipped", StringComparison.OrdinalIgnoreCase))
+                    {
+                        data.Result = "OK";
+                        data.Message = data.PID;
+                    }
+
                     // ===================== 3) CẬP NHẬT UI (chỉ khi khác) =====================
                     if (!UiStateEquals(_lastUi, data))
                     {
@@ -1559,7 +1947,7 @@ namespace MSFC
                     _lastStatusValue = data.Result;
 
                     // ===================== 4) GHI DB – CHẠY NỀN =====================
-                    if (Classify(resClean) == ResultKind.Ok)
+                    if (Classify(data.Result) == ResultKind.Ok)
                     {
                         var snap = new PCB
                         {
@@ -1572,7 +1960,7 @@ namespace MSFC
                         };
                         _uploadSvc.Enqueue(snap); // fire-and-forget, chạy nền
 
-                       
+
                     }
                     _building = false;
                 }
@@ -1708,7 +2096,9 @@ namespace MSFC
 
         private void Form1_Load(object sender, EventArgs e)
         {
-
+            this.KeyPreview = true;
+            cbtnConfirmSetting.Checked = false;
+            rtxtDetailExplain.ReadOnly = true;
         }
 
         private void lbStatus_Click(object sender, EventArgs e)
@@ -1770,6 +2160,15 @@ namespace MSFC
         private void label4_Click(object sender, EventArgs e)
         {
 
+        }
+
+        private void Form1_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Space)
+            {
+                btnPrint.PerformClick();
+                e.Handled = true;
+            }
         }
     }
     // 1) Helper: STA worker (một thread STA có queue)
