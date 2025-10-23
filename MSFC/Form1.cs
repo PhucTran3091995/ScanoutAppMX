@@ -315,7 +315,7 @@ namespace MSFC
 
         // ======= UpdateUI tối ưu (UI-thread) =======
 
-        private void UpdateUI(PCB data)
+        private async Task UpdateUI(PCB data)
         {
             if (data == null) return;
             if (!this.IsHandleCreated || this.IsDisposed) return;
@@ -386,6 +386,11 @@ namespace MSFC
 
                     // 6.5) Message detail – chỉ viết khi có & khác
                     if (!string.IsNullOrWhiteSpace(data.Message)) msgs.Add(data.Message);
+
+                    // CHeck block history để thông báo cho OP
+                    var block = await GetBlockData(data.PID);
+                    if (block.isBlock) msgs.Add(block.history);
+
 
                     ShowNoticeAndExplain(msgs);
                     //ShowNoticeAndExplain(data.Message);
@@ -571,6 +576,22 @@ namespace MSFC
                     break;
             }
         }
+        private async Task<(bool isBlock, string history)> GetBlockData(string pid)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+
+            var row = await db.TbBlocks
+                .Where(x => x.Pid == pid && x.Status == "Y")
+                .FirstOrDefaultAsync();
+
+            // Không found => trả false, history rỗng
+            if (row == null)
+                return (false, "");
+
+            // Found
+            return (true, row.History ?? "");
+        }
+
 
 
 
@@ -597,14 +618,14 @@ namespace MSFC
                 var affected = await db.Database.ExecuteSqlRawAsync(sql, new[]
                 {
                     new MySqlConnector.MySqlParameter("@CLIENT_ID",     _ClientIp),
-                     new MySqlConnector.MySqlParameter("@PID",      data.PID),
+                    new MySqlConnector.MySqlParameter("@PID",      data.PID),
                     new MySqlConnector.MySqlParameter("@WORK_ORDER",       data.WO ?? (object)DBNull.Value),
                     new MySqlConnector.MySqlParameter("@PART_NO",   data.EBR ?? (object)DBNull.Value),
                     new MySqlConnector.MySqlParameter("@SCAN_AT",  DateTime.Now),
                     new MySqlConnector.MySqlParameter("@QTY", 1),
                     new MySqlConnector.MySqlParameter("@FIRST_INSPECTOR",   _inspector1),
-                     new MySqlConnector.MySqlParameter("@SECOND_INSPECTOR",   _inspector2),
-                       new MySqlConnector.MySqlParameter("@SCAN_DATE",   DateTime.Now.Date),
+                    new MySqlConnector.MySqlParameter("@SECOND_INSPECTOR",   _inspector2),
+                    new MySqlConnector.MySqlParameter("@SCAN_DATE",   DateTime.Now.Date),
 
                 }, ct).ConfigureAwait(false);
 
@@ -865,118 +886,120 @@ namespace MSFC
         private async void btnPrint_Click(object sender, EventArgs e)
         {
 
-            _tagLabel = new ManufacturingTagDto
+            //_tagLabel = new ManufacturingTagDto
+            //{
+            //    ModelName = $"HONDA 25.5MY MAIN",
+            //    Date = DateTime.Now.ToString("dd/MM/yyyy"),
+            //    PartNo = "EBR25069601",
+            //    Quantity = 50,
+            //    TagId = 123456789,
+            //    Inspector1 = txtInspector1.Text,
+            //    Inspector2 = txtInspector2.Text
+            //    //PidList = tagDatas.Select(x => x.Pid).ToList()
+            //};
+            //PrintTag(_tagLabel);
+
+            var msg = string.Empty;
+            if (_uploadSvc.IsAnyRunning())
             {
-                ModelName = $"HONDA 25.5MY MAIN",
-                Date = DateTime.Now.ToString("dd/MM/yyyy"),
-                PartNo = "EBR25069601",
-                Quantity = 50,
-                TagId = 123456789,
-                Inspector1 = txtInspector1.Text,
-                Inspector2 = txtInspector2.Text
-                //PidList = tagDatas.Select(x => x.Pid).ToList()
-            };
-            PrintTag(_tagLabel);
+                msg = "Sincronizando servidor, por favor espere";
+                ShowDetailStatus(msg);
+                await _uploadSvc.WaitAllIdleAsync();
+            }
 
-            //var msg = string.Empty;
-            //if (_uploadSvc.IsAnyRunning())
-            //{
-            //    msg = "Sincronizando servidor, por favor espere";
-            //    ShowDetailStatus(msg);
-            //    await _uploadSvc.WaitAllIdleAsync();
-            //}
+            msg = "Sincronización completada. Comienza a imprimir sellos.";
+            ShowDetailStatus(msg);
+            try
+            {
+                //if (!lbStatus.Text.Equals("OK", StringComparison.OrdinalIgnoreCase))
+                //{
+                //    ShowDetailStatus("El último PID escaneado debe ser OK y coincidir con EBR.");
+                //    return;
+                //}
 
-            //msg = "Sincronización completada. Comienza a imprimir sellos.";
-            //ShowDetailStatus(msg);
-            //try
-            //{
-            //    //if (!lbStatus.Text.Equals("OK", StringComparison.OrdinalIgnoreCase))
-            //    //{
-            //    //    ShowDetailStatus("El último PID escaneado debe ser OK y coincidir con EBR.");
-            //    //    return;
-            //    //}
+                // snapshot danh sách PID đang chờ in (batch hiện tại)
+                string[] batchPids;
+                lock (_pendingLock)
+                {
+                    batchPids = _pendingPids.ToArray();
+                }
+                AddLog($"[DEBUG] batchPids: {string.Join(",\r\n", batchPids)}");
+                AddLog($"[DEBUG] _ClientIp: {_ClientIp}, _settingEBR: {_settingEBR}");
 
-            //    // snapshot danh sách PID đang chờ in (batch hiện tại)
-            //    string[] batchPids;
-            //    lock (_pendingLock)
-            //    {
-            //        batchPids = _pendingPids.ToArray();
-            //    }
-            //    AddLog($"[DEBUG] batchPids: {string.Join(",\r\n", batchPids)}");
-            //    AddLog($"[DEBUG] _ClientIp: {_ClientIp}, _settingEBR: {_settingEBR}");
+                // And after fetching tagDatas:
 
-            //    // And after fetching tagDatas:
+                if (batchPids.Length == 0)
+                {
+                    ShowDetailStatus("No hay PIDs pendientes para imprimir.");
+                    return;
+                }
 
-            //    if (batchPids.Length == 0)
-            //    {
-            //        ShowDetailStatus("No hay PIDs pendientes para imprimir.");
-            //        return;
-            //    }
+                using var db = await _dbFactory.CreateDbContextAsync();
 
-            //    using var db = await _dbFactory.CreateDbContextAsync();
+                // Lấy đúng các dòng thuộc batch hiện tại, chưa in
+                var tagDatas = await (
+                    from s in db.TbScanOuts
+                    join m in db.TbModelDicts on s.PartNo equals m.PartNo into gj
+                    from m in gj.DefaultIfEmpty()     // <-- left join
+                    where batchPids.Contains(s.Pid)
+                    select new
+                    {
+                        PartNo = m != null ? m.PartNo : null,   // có thể null nếu không match
+                        ModelName = m != null ? m.ModelName : null,
+                        Board = m != null ? m.Board : null,
+                        Pid = s.Pid
+                    }
+                ).ToListAsync();
 
-            //    // Lấy đúng các dòng thuộc batch hiện tại, chưa in
-            //    var tagDatas = await (
-            //        from s in db.TbScanOuts
-            //        join m in db.TbModelDicts on s.PartNo equals m.PartNo into gj
-            //        from m in gj.DefaultIfEmpty()     // <-- left join
-            //        where batchPids.Contains(s.Pid)
-            //        select new
-            //        {
-            //            PartNo = m != null ? m.PartNo : null,   // có thể null nếu không match
-            //            ModelName = m != null ? m.ModelName : null,
-            //            Board = m != null ? m.Board : null,
-            //            Pid = s.Pid
-            //        }
-            //    ).ToListAsync();
+                AddLog($"[DEBUG] tagDatas.Count: {tagDatas.Count}");
+                if (tagDatas.Count == 0)
+                {
+                    ShowDetailStatus("No se encontraron PIDs válidos en el lote actual.");
+                    //// loại các PID không còn match khỏi batch để tránh lặp vô hạn
+                    //lock (_pendingLock)
+                    //{
+                    //    foreach (var pid in batchPids) _pendingPids.Remove(pid);
+                    //}
+                    return;
+                }
 
-            //    AddLog($"[DEBUG] tagDatas.Count: {tagDatas.Count}");
-            //    if (tagDatas.Count == 0)
-            //    {
-            //        ShowDetailStatus("No se encontraron PIDs válidos en el lote actual.");
-            //        //// loại các PID không còn match khỏi batch để tránh lặp vô hạn
-            //        //lock (_pendingLock)
-            //        //{
-            //        //    foreach (var pid in batchPids) _pendingPids.Remove(pid);
-            //        //}
-            //        return;
-            //    }
+                var now = DateTime.Now;
+                long tagId = GenerateTagId();
 
-            //    var now = DateTime.Now;
-            //    long tagId = GenerateTagId();
+                //AddLog("Assign data for tag label\r\n");
+                _tagLabel = new ManufacturingTagDto
+                {
+                    ModelName = $"{tagDatas[0].ModelName}-{tagDatas[0].Board}",
+                    Date = now.ToString("dd/MM/yyyy"),
+                    PartNo = tagDatas[0].PartNo,
+                    Quantity = tagDatas.Count,
+                    TagId = tagId,
+                    PidList = tagDatas.Select(x => x.Pid).ToList(),
+                    Inspector1 = _inspector1,
+                    Inspector2 = _inspector2
+                };
 
-            //    //AddLog("Assign data for tag label\r\n");
-            //    _tagLabel = new ManufacturingTagDto
-            //    {
-            //        ModelName = $"{tagDatas[0].ModelName}-{tagDatas[0].Board}",
-            //        Date = now.ToString("dd/MM/yyyy"),
-            //        PartNo = tagDatas[0].PartNo,
-            //        Quantity = tagDatas.Count,
-            //        TagId = tagId,
-            //        PidList = tagDatas.Select(x => x.Pid).ToList()
-            //    };
+                //AddLog("Print\r\n");
+                PrintTag(_tagLabel);
 
-            //    //AddLog("Print\r\n");
-            //    PrintTag(_tagLabel);
+                AddLog($"[DEBUG] Start update database");
+                await db.TbScanOuts
+                    .Where(x => _tagLabel.PidList.Contains(x.Pid))
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(r => r.TagId, r => tagId)
+                        .SetProperty(r => r.PrintAt, r => DateTime.Now)
+                        .SetProperty(r => r.PrintDate, r => DateOnly.FromDateTime(DateTime.Now))
+                    );
+                AddLog($"[DEBUG] Start reset all data");
 
-            //    AddLog($"[DEBUG] Start update database");
-            //    await db.TbScanOuts
-            //        .Where(x => _tagLabel.PidList.Contains(x.Pid))
-            //        .ExecuteUpdateAsync(s => s
-            //            .SetProperty(r => r.TagId, r => tagId)
-            //            .SetProperty(r => r.PrintAt, r => DateTime.Now)
-            //            .SetProperty(r => r.PrintDate, r => DateOnly.FromDateTime(DateTime.Now))
-            //        );
-            //    AddLog($"[DEBUG] Start reset all data");
+                resetUI();
 
-            //    resetUI();
-
-            //    AddLog($"[DEBUG] Completed! Reset all data");
-            //}
-            //catch (Exception ex)
-            //{
-            //    AddLog(ex.Message);
-            //}
+                AddLog($"[DEBUG] Completed! Reset all data");
+            }
+            catch (Exception ex)
+            {
+                AddLog(ex.Message);
+            }
         }
 
         #region Print Setting & Generate label tag
@@ -1922,7 +1945,9 @@ namespace MSFC
                         EBR = tail.ebr,
                         WO = tail.wo,
                         Message = tail.msg,
-                        Progress = tail.prog
+                        Progress = tail.prog,
+                        Inspector1 = _inspector1,
+                        Inspector2 = _inspector2
                     };
 
                     // Nếu là hàng đã scanout rồi thì coi như là OK
@@ -1956,7 +1981,9 @@ namespace MSFC
                             WO = data.WO,
                             Result = data.Result,
                             Message = data.Message,
-                            Progress = data.Progress
+                            Progress = data.Progress,
+                            Inspector1 = data.Inspector1,
+                            Inspector2 = data.Inspector2,
                         };
                         _uploadSvc.Enqueue(snap); // fire-and-forget, chạy nền
 
@@ -2097,7 +2124,7 @@ namespace MSFC
         private void Form1_Load(object sender, EventArgs e)
         {
             this.KeyPreview = true;
-            cbtnConfirmSetting.Checked = false;
+            cbtnConfirmSetting.Checked = true;
             rtxtDetailExplain.ReadOnly = true;
         }
 

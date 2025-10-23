@@ -15,5 +15,7 @@ namespace MSFC.Models
         public string Message { get; set; }
         public string Progress { get; set; }
         public string Buyer {  get; set; }
+        public string Inspector1 { get; set; }
+        public string Inspector2 { get; set; }
     }
 }
