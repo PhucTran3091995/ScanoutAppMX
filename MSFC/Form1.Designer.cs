@@ -623,6 +623,7 @@
             // 
             // tableLayoutPanel3
             // 
+            tableLayoutPanel3.CellBorderStyle = TableLayoutPanelCellBorderStyle.Single;
             tableLayoutPanel3.ColumnCount = 4;
             tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 79F));
             tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 7F));
@@ -645,10 +646,10 @@
             pnPID.BackColor = SystemColors.ButtonFace;
             pnPID.Controls.Add(lbPID);
             pnPID.Dock = DockStyle.Fill;
-            pnPID.Location = new Point(4, 5);
+            pnPID.Location = new Point(5, 6);
             pnPID.Margin = new Padding(4, 5, 4, 5);
             pnPID.Name = "pnPID";
-            pnPID.Size = new Size(1726, 67);
+            pnPID.Size = new Size(1722, 65);
             pnPID.TabIndex = 3;
             // 
             // lbPID
@@ -668,7 +669,7 @@
             // 
             cbManualQty.Anchor = AnchorStyles.None;
             cbManualQty.AutoSize = true;
-            cbManualQty.Location = new Point(1742, 24);
+            cbManualQty.Location = new Point(1740, 24);
             cbManualQty.Name = "cbManualQty";
             cbManualQty.Size = new Size(137, 29);
             cbManualQty.TabIndex = 4;
@@ -679,7 +680,7 @@
             // 
             cb6PCBs.Anchor = AnchorStyles.None;
             cb6PCBs.AutoSize = true;
-            cb6PCBs.Location = new Point(1915, 24);
+            cb6PCBs.Location = new Point(1914, 24);
             cb6PCBs.Name = "cb6PCBs";
             cb6PCBs.Size = new Size(97, 29);
             cb6PCBs.TabIndex = 5;
@@ -690,7 +691,7 @@
             // 
             cb24PCBs.Anchor = AnchorStyles.None;
             cb24PCBs.AutoSize = true;
-            cb24PCBs.Location = new Point(2067, 24);
+            cb24PCBs.Location = new Point(2066, 24);
             cb24PCBs.Name = "cb24PCBs";
             cb24PCBs.Size = new Size(102, 29);
             cb24PCBs.TabIndex = 6;

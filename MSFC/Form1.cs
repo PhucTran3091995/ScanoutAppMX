@@ -112,7 +112,7 @@ namespace MSFC
         //========== Quản lý PID đã scan tại thời điểm hiện tại để phục vụ in tem ==========
         private readonly object _pendingLock = new();
         private readonly HashSet<string> _pendingPids = new(StringComparer.OrdinalIgnoreCase);
-
+        private bool _suppressQuantityEvents;
 
         public Form1(
             IDbContextFactory<MMesDbContext> dbFactory,
@@ -157,7 +157,13 @@ namespace MSFC
 
             SetAutoStart(true);
 
-          
+
+            cbManualQty.CheckedChanged += QuantityMode_CheckedChanged;
+            cb6PCBs.CheckedChanged += QuantityMode_CheckedChanged;
+            cb24PCBs.CheckedChanged += QuantityMode_CheckedChanged;
+            SetupQuantityCheckboxes();
+
+
             //richTextBox1.ReadOnly = true;
 
 
@@ -175,6 +181,8 @@ namespace MSFC
                 if (_resultUcEl == null) _resultUcEl = _automationService2.GetControlById(_config2.Controls.ResultUc);
             }
         }
+
+
 
         private void ResetRtxtDetailExplain()
         {
@@ -236,6 +244,38 @@ namespace MSFC
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+
+        private void SetupQuantityCheckboxes()
+        {
+            _suppressQuantityEvents = true;
+            cbManualQty.Checked = true;
+            cb6PCBs.Checked = false;
+            cb24PCBs.Checked = false;
+            _suppressQuantityEvents = false;
+        }
+
+        private void QuantityMode_CheckedChanged(object sender, EventArgs e)
+        {
+            if (sender is not System.Windows.Forms.CheckBox changed || !changed.Checked) return;
+
+            _suppressQuantityEvents = true;
+            if (!ReferenceEquals(changed, cbManualQty)) cbManualQty.Checked = false;
+            if (!ReferenceEquals(changed, cb6PCBs)) cb6PCBs.Checked = false;
+            if (!ReferenceEquals(changed, cb24PCBs)) cb24PCBs.Checked = false;
+            _suppressQuantityEvents = false;
+
+            TryAutoPrintByQuantity();
+        }
+
+        private void TryAutoPrintByQuantity()
+        {
+            if (!int.TryParse(lbPreviewScanQty.Text, out var qty)) return;
+
+            if ((cb6PCBs.Checked && qty == 6) || (cb24PCBs.Checked && qty == 24))
+            {
+                btnPrint.PerformClick();
+            }
+        }
         private static bool SetIfChanged(System.Windows.Forms.TextBox tb, string text)
         {
             var t = text ?? string.Empty;
@@ -389,7 +429,10 @@ namespace MSFC
                             _pendingPids.Add(data.PID);
                         }
                         //SetIfChanged(lbPreviewScanQty, (_pendingPids.Count() + 1).ToString());
-                        SetIfChanged(lbPreviewScanQty, _pendingPids.Count().ToString());
+                        if (SetIfChanged(lbPreviewScanQty, _pendingPids.Count().ToString()))
+                        {
+                            TryAutoPrintByQuantity();
+                        }
                         var (completedQty, woQty) = ExtractProgressSafe(data.Progress);
                         int done = Math.Max(0, completedQty);
                         int total = Math.Max(1, woQty);
@@ -1210,12 +1253,22 @@ namespace MSFC
             // Line 2: Date
             DrawLine($"Date: {tag?.Date ?? ""}", fBody, 1);
 
-            // Line 3: Part No
-            string partFormatted = FormatPartNo(tag?.PartNo ?? "");
+            // Line 3: Part No -> prefer lbPreviewPno.Text, fallback to tag.PartNo
+            string partNo = string.IsNullOrWhiteSpace(tag?.PartNo) ? lbPreviewPno.Text : tag.PartNo;
+            string partFormatted = FormatPartNo(partNo ?? "");
             DrawLine($"Part No: {partFormatted}", fBody, 2);
 
             // Line 4: Q'ty
             DrawLine($"Q'ty: {tag?.Quantity.ToString() ?? ""}", fBody, 3);
+
+            // Line 5: Inspector 1 (take from txtInspector1 if available, fallback to tag)
+            var insp1 = (this.txtInspector1?.Text?.Trim().Length > 0) ? this.txtInspector1.Text.Trim() : (tag?.Inspector1 ?? "");
+            DrawLine($"Inspector 1: {insp1}", fBody, 4);
+
+            // Line 6: Inspector 2 (take from txtInspector2 if available, fallback to tag)
+            var insp2 = (this.txtInspector2?.Text?.Trim().Length > 0) ? this.txtInspector2.Text.Trim() : (tag?.Inspector2 ?? "");
+            DrawLine($"Inspector 2: {insp2}", fBody, 5);
+
         }
 
         string FormatPartNo(string partNo)
