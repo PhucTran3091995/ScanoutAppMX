@@ -52,8 +52,6 @@
             lbModelSuffix = new Label();
             lbModelInfor = new Label();
             tbRight = new TableLayoutPanel();
-            pnPID = new Panel();
-            lbPID = new Label();
             pnStatus = new Panel();
             lbStatus = new Label();
             pnDetailStatus = new Panel();
@@ -71,6 +69,12 @@
             label7 = new Label();
             tableLayoutPanel2 = new TableLayoutPanel();
             label4 = new Label();
+            tableLayoutPanel3 = new TableLayoutPanel();
+            pnPID = new Panel();
+            lbPID = new Label();
+            cbManualQty = new CheckBox();
+            cb6PCBs = new CheckBox();
+            cb24PCBs = new CheckBox();
             tbMain = new TableLayoutPanel();
             tbSettingEBR = new TableLayoutPanel();
             txtInspector2 = new TextBox();
@@ -88,7 +92,6 @@
             ((System.ComponentModel.ISupportInitialize)chartProgress).BeginInit();
             pnProgressStatusData.SuspendLayout();
             tbRight.SuspendLayout();
-            pnPID.SuspendLayout();
             pnStatus.SuspendLayout();
             pnDetailStatus.SuspendLayout();
             panel1.SuspendLayout();
@@ -97,6 +100,8 @@
             tbPreview2.SuspendLayout();
             tbPreview3.SuspendLayout();
             tableLayoutPanel2.SuspendLayout();
+            tableLayoutPanel3.SuspendLayout();
+            pnPID.SuspendLayout();
             tbMain.SuspendLayout();
             tbSettingEBR.SuspendLayout();
             tbContent.SuspendLayout();
@@ -360,11 +365,11 @@
             // 
             tbRight.ColumnCount = 1;
             tbRight.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            tbRight.Controls.Add(pnPID, 0, 2);
             tbRight.Controls.Add(pnStatus, 0, 0);
             tbRight.Controls.Add(pnDetailStatus, 0, 1);
             tbRight.Controls.Add(btnPrint, 0, 4);
             tbRight.Controls.Add(panel1, 0, 3);
+            tbRight.Controls.Add(tableLayoutPanel3, 0, 2);
             tbRight.Dock = DockStyle.Fill;
             tbRight.Location = new Point(404, 5);
             tbRight.Margin = new Padding(4, 5, 4, 5);
@@ -377,30 +382,6 @@
             tbRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 167F));
             tbRight.Size = new Size(2202, 1130);
             tbRight.TabIndex = 1;
-            // 
-            // pnPID
-            // 
-            pnPID.BackColor = SystemColors.ButtonFace;
-            pnPID.Controls.Add(lbPID);
-            pnPID.Dock = DockStyle.Fill;
-            pnPID.Location = new Point(4, 255);
-            pnPID.Margin = new Padding(4, 5, 4, 5);
-            pnPID.Name = "pnPID";
-            pnPID.Size = new Size(2194, 73);
-            pnPID.TabIndex = 3;
-            // 
-            // lbPID
-            // 
-            lbPID.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
-            lbPID.AutoSize = true;
-            lbPID.Font = new Font("Arial", 18F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            lbPID.ForeColor = SystemColors.ActiveCaptionText;
-            lbPID.Location = new Point(9, 12);
-            lbPID.Margin = new Padding(4, 0, 4, 0);
-            lbPID.Name = "lbPID";
-            lbPID.Size = new Size(189, 43);
-            lbPID.TabIndex = 3;
-            lbPID.Text = "PCBA S/N";
             // 
             // pnStatus
             // 
@@ -640,6 +621,82 @@
             label4.Text = "Vista previa de la etiqueta";
             label4.TextAlign = ContentAlignment.MiddleCenter;
             // 
+            // tableLayoutPanel3
+            // 
+            tableLayoutPanel3.ColumnCount = 4;
+            tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 79F));
+            tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 7F));
+            tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 7F));
+            tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 7F));
+            tableLayoutPanel3.Controls.Add(pnPID, 0, 0);
+            tableLayoutPanel3.Controls.Add(cbManualQty, 1, 0);
+            tableLayoutPanel3.Controls.Add(cb6PCBs, 2, 0);
+            tableLayoutPanel3.Controls.Add(cb24PCBs, 3, 0);
+            tableLayoutPanel3.Dock = DockStyle.Fill;
+            tableLayoutPanel3.Location = new Point(3, 253);
+            tableLayoutPanel3.Name = "tableLayoutPanel3";
+            tableLayoutPanel3.RowCount = 1;
+            tableLayoutPanel3.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            tableLayoutPanel3.Size = new Size(2196, 77);
+            tableLayoutPanel3.TabIndex = 5;
+            // 
+            // pnPID
+            // 
+            pnPID.BackColor = SystemColors.ButtonFace;
+            pnPID.Controls.Add(lbPID);
+            pnPID.Dock = DockStyle.Fill;
+            pnPID.Location = new Point(4, 5);
+            pnPID.Margin = new Padding(4, 5, 4, 5);
+            pnPID.Name = "pnPID";
+            pnPID.Size = new Size(1726, 67);
+            pnPID.TabIndex = 3;
+            // 
+            // lbPID
+            // 
+            lbPID.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
+            lbPID.AutoSize = true;
+            lbPID.Font = new Font("Arial", 18F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            lbPID.ForeColor = SystemColors.ActiveCaptionText;
+            lbPID.Location = new Point(9, 12);
+            lbPID.Margin = new Padding(4, 0, 4, 0);
+            lbPID.Name = "lbPID";
+            lbPID.Size = new Size(189, 43);
+            lbPID.TabIndex = 3;
+            lbPID.Text = "PCBA S/N";
+            // 
+            // cbManualQty
+            // 
+            cbManualQty.Anchor = AnchorStyles.None;
+            cbManualQty.AutoSize = true;
+            cbManualQty.Location = new Point(1742, 24);
+            cbManualQty.Name = "cbManualQty";
+            cbManualQty.Size = new Size(137, 29);
+            cbManualQty.TabIndex = 4;
+            cbManualQty.Text = "Manual Print";
+            cbManualQty.UseVisualStyleBackColor = true;
+            // 
+            // cb6PCBs
+            // 
+            cb6PCBs.Anchor = AnchorStyles.None;
+            cb6PCBs.AutoSize = true;
+            cb6PCBs.Location = new Point(1915, 24);
+            cb6PCBs.Name = "cb6PCBs";
+            cb6PCBs.Size = new Size(97, 29);
+            cb6PCBs.TabIndex = 5;
+            cb6PCBs.Text = "6 PCBs ";
+            cb6PCBs.UseVisualStyleBackColor = true;
+            // 
+            // cb24PCBs
+            // 
+            cb24PCBs.Anchor = AnchorStyles.None;
+            cb24PCBs.AutoSize = true;
+            cb24PCBs.Location = new Point(2067, 24);
+            cb24PCBs.Name = "cb24PCBs";
+            cb24PCBs.Size = new Size(102, 29);
+            cb24PCBs.TabIndex = 6;
+            cb24PCBs.Text = "24 PCBs";
+            cb24PCBs.UseVisualStyleBackColor = true;
+            // 
             // tbMain
             // 
             tbMain.ColumnCount = 1;
@@ -666,7 +723,7 @@
             tbSettingEBR.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 207F));
             tbSettingEBR.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 139F));
             tbSettingEBR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            tbSettingEBR.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 139F));
+            tbSettingEBR.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 253F));
             tbSettingEBR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
             tbSettingEBR.Controls.Add(txtInspector2, 6, 0);
             tbSettingEBR.Controls.Add(txtInspector1, 4, 0);
@@ -688,11 +745,11 @@
             // 
             txtInspector2.Dock = DockStyle.Fill;
             txtInspector2.Font = new Font("Arial", 20.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            txtInspector2.Location = new Point(1778, 5);
+            txtInspector2.Location = new Point(1835, 5);
             txtInspector2.Margin = new Padding(4, 5, 4, 5);
             txtInspector2.MaxLength = 45;
             txtInspector2.Name = "txtInspector2";
-            txtInspector2.Size = new Size(844, 54);
+            txtInspector2.Size = new Size(787, 54);
             txtInspector2.TabIndex = 9;
             // 
             // txtInspector1
@@ -703,17 +760,17 @@
             txtInspector1.Margin = new Padding(4, 5, 4, 5);
             txtInspector1.MaxLength = 45;
             txtInspector1.Name = "txtInspector1";
-            txtInspector1.Size = new Size(843, 54);
+            txtInspector1.Size = new Size(786, 54);
             txtInspector1.TabIndex = 8;
             // 
             // label5
             // 
             label5.Dock = DockStyle.Fill;
             label5.Font = new Font("Arial", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            label5.Location = new Point(1639, 0);
+            label5.Location = new Point(1582, 0);
             label5.Margin = new Padding(4, 0, 4, 0);
             label5.Name = "label5";
-            label5.Size = new Size(131, 73);
+            label5.Size = new Size(245, 73);
             label5.TabIndex = 7;
             label5.Text = "Segundo inspector";
             label5.TextAlign = ContentAlignment.MiddleLeft;
@@ -800,8 +857,6 @@
             ((System.ComponentModel.ISupportInitialize)chartProgress).EndInit();
             pnProgressStatusData.ResumeLayout(false);
             tbRight.ResumeLayout(false);
-            pnPID.ResumeLayout(false);
-            pnPID.PerformLayout();
             pnStatus.ResumeLayout(false);
             pnDetailStatus.ResumeLayout(false);
             pnDetailStatus.PerformLayout();
@@ -814,6 +869,10 @@
             tbPreview3.PerformLayout();
             tableLayoutPanel2.ResumeLayout(false);
             tableLayoutPanel2.PerformLayout();
+            tableLayoutPanel3.ResumeLayout(false);
+            tableLayoutPanel3.PerformLayout();
+            pnPID.ResumeLayout(false);
+            pnPID.PerformLayout();
             tbMain.ResumeLayout(false);
             tbSettingEBR.ResumeLayout(false);
             tbSettingEBR.PerformLayout();
@@ -874,5 +933,8 @@
         private TableLayoutPanel tbPreview3;
         private TableLayoutPanel tableLayoutPanel2;
         private Label label4;
+        private CheckBox cbManualQty;
+        private CheckBox cb6PCBs;
+        private CheckBox cb24PCBs;
     }
 }

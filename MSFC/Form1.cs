@@ -176,19 +176,6 @@ namespace MSFC
             }
         }
 
-        private void InvalidateHandlesIfNulls(params string[] which)
-        {
-            // khi đọc ra null/hỏng, refresh cache & resolve lại đúng handle
-            _automationService2.RefreshCache();
-            _pidEl = _pidEl ?? _automationService2.GetControlById(_config2.Controls.PID);
-            _resultEl = _resultEl ?? _automationService2.GetChildControl(_config2.Controls.ResultUc, _config2.Controls.ResultText);
-            _ebrEl = _ebrEl ?? _automationService2.GetChildControl(_config2.Controls.ModelSuffixUc, "txtText");
-            _woEl = _woEl ?? _automationService2.GetChildControl(_config2.Controls.WorkOrderUc, "txtText");
-            _qtyEl = _qtyEl ?? _automationService2.GetControlById(_config2.Controls.ResultQty);
-            _resultUcEl = _resultUcEl ?? _automationService2.GetControlById(_config2.Controls.ResultUc);
-        }
-
-
         private void ResetRtxtDetailExplain()
         {
             rtxtDetailExplain.Clear();
