@@ -200,62 +200,173 @@ namespace MSFC
 
         void PrintTag(ManufacturingTagDto tag)
         {
-            var doc = new PrintDocument();
-            doc.PrinterSettings = new PrinterSettings();
+            try
+            {
+                AddLog("PrintTag: Start printing tag.");
+                var doc = new PrintDocument();
+                doc.PrinterSettings = new PrinterSettings();
 
-            // lấy đúng size 50x25mm từ driver (197x98 hundredths-inch hoặc ngược)
-            var ps = doc.PrinterSettings.PaperSizes
-                .Cast<PaperSize>()
-                .FirstOrDefault(p => Math.Abs(p.Width - 197) < 5 && Math.Abs(p.Height - 98) < 5
-                                  || Math.Abs(p.Width - 98) < 5 && Math.Abs(p.Height - 197) < 5);
-            if (ps != null) doc.DefaultPageSettings.PaperSize = ps;
+                // lấy đúng size ~55x38mm từ driver (217x150 hundredths-inch)
+                var ps = doc.PrinterSettings.PaperSizes
+                    .Cast<PaperSize>()
+                    .FirstOrDefault(p => (Math.Abs(p.Width - 217) < 5 && Math.Abs(p.Height - 150) < 5)
+                                      || (Math.Abs(p.Width - 150) < 5 && Math.Abs(p.Height - 217) < 5));
+                if (ps != null) doc.DefaultPageSettings.PaperSize = ps;
 
-            doc.DefaultPageSettings.Margins = new System.Drawing.Printing.Margins(0, 0, 0, 0);
-            doc.OriginAtMargins = true;              // (0,0) = MarginBounds.TopLeft
-            doc.DefaultPageSettings.Landscape = false; // nếu bị xoay hãy thử true
+                doc.DefaultPageSettings.Margins = new System.Drawing.Printing.Margins(0, 0, 0, 0);
+                doc.OriginAtMargins = true;              // (0,0) = MarginBounds.TopLeft
+                doc.DefaultPageSettings.Landscape = false; // nếu bị xoay hãy thử true
+                AddLog("PrintTag: Start generate label...");
+                _tagLabel = tag;
+                doc.PrintPage += GenerateLabel_FitMarginBounds;
 
-            _tagLabel = tag;
-            doc.PrintPage += GenerateLabel_FitMarginBounds;
+                AddLog("PrintTag: Calling doc.Print()...");
+                doc.Print();
+                AddLog("PrintTag: Print completed.");
+            }
+            catch (Exception ex)
+            {
+                AddLog($"PrintTag: Exception - {ex.Message}\r\n{ex.StackTrace}");
+                throw;
+            }
+        }
 
-            doc.Print();
+        private void AddLog(string msg)
+        {
         }
         void GenerateLabel_FitMarginBounds(object sender, PrintPageEventArgs e)
         {
-
             var g = e.Graphics;
+            try
+            {
+                // safety
+                if (_tagLabel == null)
+                {
+                    e.HasMorePages = false;
+                    return;
+                }
 
-            // KHÔNG bù hard margins khi đã dùng OriginAtMargins + MarginBounds
-            // g.TranslateTransform(-e.PageSettings.HardMarginX, -e.PageSettings.HardMarginY); // ❌ bỏ
+                // device bounds prefer MarginBounds
+                Rectangle deviceBounds = e.MarginBounds;
+                if (deviceBounds.Width <= 0 || deviceBounds.Height <= 0)
+                {
+                    deviceBounds = new Rectangle(e.PageBounds.Left + 10, e.PageBounds.Top + 10,
+                                                 Math.Min(400, e.PageBounds.Width - 20),
+                                                 Math.Min(300, e.PageBounds.Height - 20));
+                }
 
-            // Canvas thiết kế theo đơn vị 1/100 inch (giống PrintTagTest)
-            float designW = 197f; // ~50mm
-            float designH = 98f;  // ~25mm
+                // apply offsets (in hundredths of inch)
+                int offX = MmToHundredths(_offsetXmm);
+                int offY = MmToHundredths(_offsetYmm);
+                var dest = new Rectangle(deviceBounds.Left + offX, deviceBounds.Top + offY, deviceBounds.Width, deviceBounds.Height);
 
-            // Vùng in thật driver cho phép
-            var dest = e.MarginBounds;
-            // >>> ÁP OFFSET Ở ĐÂY <<<
-            int offX = MmToHundredths(_offsetXmm);
-            int offY = MmToHundredths(_offsetYmm);
+                if (dest.Width <= 0 || dest.Height <= 0)
+                {
+                    e.HasMorePages = false;
+                    return;
+                }
 
-            // dịch rect theo offset; clamp nhẹ cho an toàn
-            dest = new Rectangle(
-                dest.Left + offX,
-                dest.Top + offY,
-                dest.Width,
-                dest.Height
-            );
-            // Ép full theo từng trục (không chừa trắng)
-            float scaleX = dest.Width / designW;
-            float scaleY = dest.Height / designH;
+                // DESIGN: 55mm x 38mm => design units in hundredths of inch
+                float designW = 217f; // ~55mm
+                float designH = 150f; // ~38mm
 
-            // Gốc tại góc trên-trái của vùng in
-            g.TranslateTransform(dest.Left, dest.Top);
-            g.ScaleTransform(scaleX, scaleY);
+                // Compute key layout values in design units (same logic as DrawTag_DesignUnits)
+                float padY = designH * 0.05f;            // top/bottom pad used in DrawTag_DesignUnits
+                float titleHeight = designH * 0.18f;     // title area height
+                                                         // yStart = padY + titleHeight + small gap (0.02*H)
+                float yStart = padY + titleHeight + designH * 0.02f;
+                // textH = (H - padY) - yStart
+                float textH = (designH - padY) - yStart;
+                float lineH = textH / 4f;                // 4 lines, last one is Q'TY
+                                                         // bottom of Q'TY line sits at: yStart + 3*lineH + lineH = yStart + textH = designH - padY
+                float bottomOfQty = designH - padY;
 
-            // Vẽ theo "design space" 0..designW x 0..designH
-            DrawTag_DesignUnits(g, designW, designH, _tagLabel);
+                // small extra gap after Q'TY in mm (how much paper you want after the line)
+                float extraGapMm = 0.1f; // tweak this (0.1 mm recommended)
+                int extraGapDeviceUnits = MmToHundredths(extraGapMm); // in hundredths of inch (device units)
 
-            e.HasMorePages = false;
+                // We want to compute required device height to include content up to bottomOfQty + extraGap
+                // Choose scale based on width (so width fits design exactly) — avoids unexpected shrink/stretch
+                float scaleBasedOnWidth = dest.Width / designW;
+
+                // Required device height to include bottomOfQty:
+                float requiredDeviceHeight = bottomOfQty * scaleBasedOnWidth + extraGapDeviceUnits;
+
+                // If device is continuous (dest.Height very large), clamp to requiredDeviceHeight to avoid long feed
+                // We'll consider "continuous" when dest.Height >> designH
+                float continuousThresholdMultiplier = 3.0f;
+                if (dest.Height > designH * continuousThresholdMultiplier)
+                {
+                    // clamp but ensure at least some minimal height
+                    int minAllowed = MmToHundredths(10); // at least 10mm tall as safety floor
+                    int clampH = Math.Max(minAllowed, (int)Math.Ceiling(requiredDeviceHeight));
+                    // limit clamp to dest.Height if smaller
+                    dest = new Rectangle(dest.Left, dest.Top, dest.Width, Math.Min(dest.Height, clampH));
+                    // Recompute scale: prefer width-based scale but ensure not to exceed vertical space
+                    float scaleYIfNeeded = (float)dest.Height / designH;
+                    // final scale chosen should not make content exceed dest: so take min(scaleBasedOnWidth, scaleYIfNeeded)
+                    float scale = Math.Min(scaleBasedOnWidth, scaleYIfNeeded);
+
+                    // final drawn sizes
+                    float drawnW = designW * scale;
+                    float drawnH = bottomOfQty * scale + extraGapDeviceUnits; // we only need height to bottom QTY + gap in device units
+
+                    // compute translate: center horizontally, top align vertically with a small top padding (use offsetYmm)
+                    float translateX = dest.Left + (dest.Width - drawnW) / 2f;
+                    float topPadding = MmToHundredths(1.0f); // 1mm top padding device units
+                    float translateY = dest.Top + topPadding;
+
+                    // Apply transform: note ScaleTransform expects scale relative to design units -> we use 'scale'
+                    var state = g.Save();
+                    try
+                    {
+                        g.TranslateTransform(translateX, translateY);
+                        g.ScaleTransform(scale, scale);
+
+                        // Draw full design in design coordinates; drawing area will be clipped by dest/driver
+                        DrawTag_DesignUnits(g, designW, designH, _tagLabel);
+                    }
+                    finally
+                    {
+                        g.Restore(state);
+                    }
+
+                    e.HasMorePages = false;
+                    return;
+                }
+
+                // Non-continuous case (normal page): compute scale uniformly based on min(scaleX, scaleY)
+                float scaleX = dest.Width / designW;
+                float scaleY = dest.Height / designH;
+                float finalScale = Math.Min(scaleX, scaleY);
+
+                float finalDrawnW = designW * finalScale;
+                float finalDrawnH = designH * finalScale;
+
+                float translateXNormal = dest.Left + (dest.Width - finalDrawnW) / 2f;
+                float topPaddingNormal = MmToHundredths(1.5f);
+                float translateYNormal = dest.Top + topPaddingNormal;
+
+                var stateNormal = g.Save();
+                try
+                {
+                    g.TranslateTransform(translateXNormal, translateYNormal);
+                    g.ScaleTransform(finalScale, finalScale);
+
+                    DrawTag_DesignUnits(g, designW, designH, _tagLabel);
+                }
+                finally
+                {
+                    g.Restore(stateNormal);
+                }
+
+                e.HasMorePages = false;
+            }
+            catch (Exception ex)
+            {
+                AddLog("[ERROR] GenerateLabel_FitMarginBounds Exception: " + ex.ToString());
+                e.HasMorePages = false;
+            }
         }
         /// <summary>
         /// Vẽ nội dung tem theo "design units" (1/100 inch), ví dụ W≈197, H≈98 cho tem 50x25mm.
@@ -263,74 +374,60 @@ namespace MSFC
         /// </summary>
         void DrawTag_DesignUnits(Graphics g, float W, float H, ManufacturingTagDto tag)
         {
-
             // ———————————————————————————————————————————————————————————
-            // 1) KHUNG & THAM SỐ BỐ CỤC CƠ BẢN
+            // 1) SETUP & LAYOUT PARAMETERS
             // ———————————————————————————————————————————————————————————
-
             using var pen = new Pen(Color.Black, 1);
-            //g.DrawRectangle(pen, 0, 0, W - 1, H - 1);   // khung ngoài mỏng
 
-            // Giảm margin: cho hiển thị nhiều nội dung hơn
-            float padX = W * 0.02f;   // ~2% bề rộng
-            float padY = H * 0.06f;   // ~6% bề cao
+            // Draw Border (Vẽ viền cho Label)
+            g.DrawRectangle(pen, 0, 0, W - 1, H - 1);
 
-            // Chia cột: 72% cho text, 28% cho QR (QR nhỏ lại)
-            float leftW = W * 0.72f;
-            float rightW = W - leftW;
+            float padX = W * 0.02f;
+            float padY = H * 0.05f;
 
-            // Đường chia cột (chỉ để tách thị giác, có thể bỏ nếu muốn)
-            g.DrawLine(pen, leftW, padY, leftW, H - padY);
-
-            // Font chữ: Arial Narrow giúp chứa nhiều ký tự hơn trong bề ngang nhỏ
-            using var fTitle = new Font("Segoe UI", 12, FontStyle.Bold, GraphicsUnit.Point);
-            using var fBody = new Font("Arial Narrow", 9, FontStyle.Regular, GraphicsUnit.Point);
-            using var fQtyStyle = new Font("Segoe UI", 12, FontStyle.Bold, GraphicsUnit.Point);
+            // Fonts
+            using var fTitle = new Font("Segoe UI", 14, FontStyle.Bold, GraphicsUnit.Point);
+            using var fBody = new Font("Arial Narrow", 11, FontStyle.Bold, GraphicsUnit.Point);
 
             // ———————————————————————————————————————————————————————————
-            // 2) TIÊU ĐỀ
+            // 2) TITLE: "Manufacture Tag"
             // ———————————————————————————————————————————————————————————
-            // Chiều cao tiêu đề ~20% tấm tem để còn chỗ cho text
-            var titleRect = new RectangleF(padX, padY, leftW - padX * 2, H * 0.20f);
-            var sfn = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
-            g.DrawString(FormatEbr(tag?.PartNo), fTitle, Brushes.Black, titleRect, sfn);
+            // Title takes top 15-20%
+            var titleRect = new RectangleF(padX, padY, W - padX * 2, H * 0.18f);
+            var sfn = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
 
-            // ———————————————————————————————————————————————————————————
-            // 3) KHỐI TEXT 3 DÒNG (Model/Date/P-No) – dạng: "Label (Value)"
-            //    Dùng DrawFitText để tự co cỡ chữ nếu quá dài, đảm bảo không bị cắt.
-            // ———————————————————————————————————————————————————————————
-            float yStart = titleRect.Bottom + H * 0.015f;  // một chút khoảng cách dưới tiêu đề
-            float textH = (H - padY) - yStart;            // khoảng cao còn lại cho text
-            float lineH = textH / 3f;                     // 3 dòng đều nhau
-            var textW = leftW - padX * 2;               // bề ngang khối text
-
-            // Ghép chuỗi theo yêu cầu:
-            string line1 = $"{tag?.ModelName ?? string.Empty}";
-            string line2 = $"Día {tag?.Date ?? string.Empty}";           // dạng DD/MM/YYYY
-            string line3 = $"Cantidad {tag?.Quantity.ToString() ?? string.Empty}";
-
-            // Vẽ từng dòng, tự co text để vừa khung
-            DrawFitText(g, line1, fBody, Brushes.Black, new RectangleF(padX, yStart + 0 * lineH, textW, lineH), 6.0f);
-            DrawFitText(g, line2, fBody, Brushes.Black, new RectangleF(padX, yStart + 1 * lineH, textW, lineH), 6.0f);
-            DrawFitText(g, line3, fQtyStyle, Brushes.Black, new RectangleF(padX, yStart + 2 * lineH, textW, lineH), 6.0f);
+            g.DrawString("Manufacture Tag", fTitle, Brushes.Black, titleRect, sfn);
 
             // ———————————————————————————————————————————————————————————
-            // 4) QR CODE (NHỎ LẠI)
+            // 3) TEXT BLOCK (4 Lines: Model Name, Date, Part No, Q'TY)
             // ———————————————————————————————————————————————————————————
-            // Ô chứa QR nằm trong cột phải, chừa ít padding để QR nhỏ gọn hơn
-            float rightPad = Math.Min(W * 0.01f, rightW * 0.05f); // padding size
-            float qrBoxW = rightW - rightPad * 2;
-            float qrBoxH = H - padY * 2;
+            float yStart = titleRect.Bottom + H * 0.02f;
+            float textH = (H - padY) - yStart;
+            float lineH = textH / 4.0f; // 4 equal lines
+            float textW = W - padX * 2; // Full width since no QR
 
-            // Giữ ô vuông => side = min(w, h), và giảm bớt ~15% cho nhỏ hơn
-            float side = Math.Min(qrBoxW, qrBoxH) * 1f; // qr code size 
-            float qrX = leftW + (rightW - side) / 2f;
-            float qrY = padY + (qrBoxH - side) / 2f;
+            // Helper to draw fit text
+            void DrawLine(string text, Font font, int index)
+            {
+                float y = yStart + index * lineH;
+                var rect = new RectangleF(padX, y, textW, lineH);
+                // Left align for body text
+                var sfnBody = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
+                // Using DrawFitText if available, or standard DrawString
+                DrawFitText(g, text, font, Brushes.Black, rect, 6.0f);
+            }
 
-            // Tạo QR: nhớ null-safe cho TagId
-            using var qr = GenerateQRCode(tag?.TagId.ToString() ?? "-", 300); // hoặc (int)Math.Round(g.DpiX)
-            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor; // để pixel QR sắc nét
-            g.DrawImage(qr, new RectangleF(qrX, qrY, side, side));
+            // Line 1: Model Name
+            DrawLine($"Model Name {tag?.ModelName ?? ""}", fBody, 0);
+
+            // Line 2: Date
+            DrawLine($"Date {tag?.Date ?? ""}", fBody, 1);
+
+            // Line 3: Part No
+            DrawLine($"Part No {tag?.PartNo ?? ""}", fBody, 2);
+
+            // Line 4: Q'TY
+            DrawLine($"Q'TY {tag?.Quantity.ToString() ?? ""}", fBody, 3);
         }
 
         /// <summary>

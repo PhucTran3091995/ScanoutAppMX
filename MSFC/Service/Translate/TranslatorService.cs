@@ -47,20 +47,25 @@ namespace MSFC.Service.Translate
             if (string.IsNullOrWhiteSpace(english))
                 return new TranslationResult(english, null, null);
 
-            // 1) dịch theo đoạn con (đã có)
+            // 1) Dịch theo đoạn con
             var translated = Translate(english);
 
-            // 2) tìm key dài nhất xuất hiện trong chuỗi
-            var match = _dict.Where(kv => ContainsIgnoreCase(english, kv.Key))
-                             .OrderByDescending(kv => kv.Key.Length)
-                             .FirstOrDefault();
+            // 2) Tìm key dài nhất xuất hiện trong chuỗi
+            var match = _dict
+                .Where(kv => ContainsIgnoreCase(english, kv.Key))
+                .OrderByDescending(kv => kv.Key.Length)
+                .FirstOrDefault();
 
             if (string.IsNullOrEmpty(match.Key))
-                return new TranslationResult(translated, null, null); // <-- không guide
+            {
+                // ❗ Không khớp dict → fallback: trả về chuỗi gốc, không dịch
+                return new TranslationResult(english, null, null);
+            }
 
             _guides.TryGetValue(match.Key, out var guide);
             return new TranslationResult(translated, guide?.Explain_Es, match.Key);
         }
+
 
         private static bool ContainsIgnoreCase(string src, string val) => src?.IndexOf(val, StringComparison.OrdinalIgnoreCase) >= 0;
 
