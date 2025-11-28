@@ -50,14 +50,6 @@ namespace MSFC.Service
         AutomationElement GetNthById(string automationId, int index);
         AutomationElement GetControlByPath(params string[] automationIds);
 
-        //public Task<AutomationElement?> WaitWindowByNameOrClassAsync(CancellationToken ct, TimeSpan timeout, params string[] namesOrClasses);
-        //public AutomationElement? FindFileNameEdit(AutomationElement dialog);
-        //public void FocusAndPaste(AutomationElement el, string text);
-
-        //public Task<(AutomationElement dialog, AutomationElement fileNameEdit)?> WaitCommonFileDialogAsync(CancellationToken ct, TimeSpan timeout);
-
-        //public Task<bool> WaitSuccessDialogAsync(CancellationToken ct, TimeSpan timeout);
-        //AutomationElement? FindButtonByNamesOrIds(AutomationElement scope, params string[] namesOrIds);
 
         public Task<(AutomationElement dialog, AutomationElement fileNameEdit, AutomationElement saveButton)?> WaitTargetSaveDialogAsync(CancellationToken ct, TimeSpan timeout);
         public Task<bool> WaitNextOkDialogAsync(CancellationToken ct, TimeSpan timeout, IntPtr? lastClosedDialogHwnd = null);

@@ -44,11 +44,6 @@ namespace MSFC
                     .UseContentRoot(AppContext.BaseDirectory)
                     .ConfigureServices((ctx, services) =>
                     {
-                        //services.AddLogging(b =>
-                        //{
-                        //    b.AddConsole();
-                        //    // TODO: thêm b.AddFile(...) nếu dùng Serilog/NLog
-                        //});
 
                         services.AddSingleton<IConfiguration>(configuration);
                         services.Configure<UiAutomationSettings>(configuration.GetSection("UiAutomation"));
@@ -56,27 +51,9 @@ namespace MSFC
                         services.Configure<KlasUiConfig>(configuration.GetSection("KLAS_UiConfig")); // ui config for KLAS
                         services.Configure<TranslationConfig>(configuration.GetSection("TranslationConfig"));
 
-                        //var conn = configuration.GetConnectionString("DefaultConnection");
-                        //var serverVersion = new MySqlServerVersion(new Version(8, 0, 43)); // chỉnh đúng
-                        //services.AddDbContextFactory<MMesDbContext>(o => o.UseMySql(conn, serverVersion));
 
                         var conn = configuration.GetConnectionString("DefaultConnection");
                         services.AddDbContextFactory<MMesDbContext>(o => o.UseMySql(conn, ServerVersion.AutoDetect(conn)));
-
-
-                        //var conn = configuration.GetConnectionString("LocalConnection");
-                        //services.AddDbContextFactory<MMesDbContext>(options =>
-                        //{
-                        //    options.UseMySql(conn, ServerVersion.AutoDetect(conn),
-                        //        mySqlOptions =>
-                        //        {
-                        //            // tuỳ chọn hữu ích:
-                        //            mySqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(5), null);
-                        //        });
-                        //    // Bật log để thấy lỗi chi tiết
-                        //    options.EnableSensitiveDataLogging();   // chỉ bật ở dev!
-                        //    options.EnableDetailedErrors();
-                        //});
 
 
                         services.AddSingleton<ILoggingService, LoggingService>();

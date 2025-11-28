@@ -28,9 +28,9 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             tbMain_Row3 = new TableLayoutPanel();
             tbData = new TableLayoutPanel();
@@ -85,6 +85,7 @@
             txtSettingEBR = new TextBox();
             cbtnConfirmSetting = new CheckBox();
             tbContent = new TableLayoutPanel();
+            btnSummary = new Button();
             tbMain_Row3.SuspendLayout();
             tbData.SuspendLayout();
             pnRight.SuspendLayout();
@@ -205,20 +206,20 @@
             // 
             // chartProgress
             // 
-            chartArea1.Name = "ChartArea1";
-            chartProgress.ChartAreas.Add(chartArea1);
+            chartArea2.Name = "ChartArea1";
+            chartProgress.ChartAreas.Add(chartArea2);
             chartProgress.Dock = DockStyle.Fill;
-            legend1.Name = "Legend1";
-            chartProgress.Legends.Add(legend1);
+            legend2.Name = "Legend1";
+            chartProgress.Legends.Add(legend2);
             chartProgress.Location = new Point(4, 5);
             chartProgress.Margin = new Padding(4, 5, 4, 5);
             chartProgress.Name = "chartProgress";
             chartProgress.Palette = System.Windows.Forms.DataVisualization.Charting.ChartColorPalette.None;
-            series1.ChartArea = "ChartArea1";
-            series1.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Doughnut;
-            series1.Legend = "Legend1";
-            series1.Name = "Series1";
-            chartProgress.Series.Add(series1);
+            series2.ChartArea = "ChartArea1";
+            series2.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Doughnut;
+            series2.Legend = "Legend1";
+            series2.Name = "Series1";
+            chartProgress.Series.Add(series2);
             chartProgress.Size = new Size(362, 249);
             chartProgress.TabIndex = 19;
             chartProgress.Text = "chart1";
@@ -624,15 +625,17 @@
             // tableLayoutPanel3
             // 
             tableLayoutPanel3.CellBorderStyle = TableLayoutPanelCellBorderStyle.Single;
-            tableLayoutPanel3.ColumnCount = 4;
-            tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 79F));
+            tableLayoutPanel3.ColumnCount = 5;
+            tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 77.12984F));
+            tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 8.701594F));
             tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 7F));
             tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 7F));
-            tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 7F));
+            tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 121F));
             tableLayoutPanel3.Controls.Add(pnPID, 0, 0);
             tableLayoutPanel3.Controls.Add(cbManualQty, 1, 0);
             tableLayoutPanel3.Controls.Add(cb6PCBs, 2, 0);
             tableLayoutPanel3.Controls.Add(cb24PCBs, 3, 0);
+            tableLayoutPanel3.Controls.Add(btnSummary, 4, 0);
             tableLayoutPanel3.Dock = DockStyle.Fill;
             tableLayoutPanel3.Location = new Point(3, 253);
             tableLayoutPanel3.Name = "tableLayoutPanel3";
@@ -649,7 +652,7 @@
             pnPID.Location = new Point(5, 6);
             pnPID.Margin = new Padding(4, 5, 4, 5);
             pnPID.Name = "pnPID";
-            pnPID.Size = new Size(1722, 65);
+            pnPID.Size = new Size(1590, 65);
             pnPID.TabIndex = 3;
             // 
             // lbPID
@@ -669,18 +672,18 @@
             // 
             cbManualQty.Anchor = AnchorStyles.None;
             cbManualQty.AutoSize = true;
-            cbManualQty.Location = new Point(1740, 24);
+            cbManualQty.Location = new Point(1642, 24);
             cbManualQty.Name = "cbManualQty";
-            cbManualQty.Size = new Size(137, 29);
+            cbManualQty.Size = new Size(96, 29);
             cbManualQty.TabIndex = 4;
-            cbManualQty.Text = "Manual Print";
+            cbManualQty.Text = "Manual";
             cbManualQty.UseVisualStyleBackColor = true;
             // 
             // cb6PCBs
             // 
             cb6PCBs.Anchor = AnchorStyles.None;
             cb6PCBs.AutoSize = true;
-            cb6PCBs.Location = new Point(1914, 24);
+            cb6PCBs.Location = new Point(1805, 24);
             cb6PCBs.Name = "cb6PCBs";
             cb6PCBs.Size = new Size(97, 29);
             cb6PCBs.TabIndex = 5;
@@ -691,7 +694,7 @@
             // 
             cb24PCBs.Anchor = AnchorStyles.None;
             cb24PCBs.AutoSize = true;
-            cb24PCBs.Location = new Point(2066, 24);
+            cb24PCBs.Location = new Point(1948, 24);
             cb24PCBs.Name = "cb24PCBs";
             cb24PCBs.Size = new Size(102, 29);
             cb24PCBs.TabIndex = 6;
@@ -838,6 +841,16 @@
             tbContent.Size = new Size(2626, 1160);
             tbContent.TabIndex = 3;
             // 
+            // btnSummary
+            // 
+            btnSummary.Anchor = AnchorStyles.None;
+            btnSummary.Location = new Point(2084, 14);
+            btnSummary.Name = "btnSummary";
+            btnSummary.Size = new Size(99, 49);
+            btnSummary.TabIndex = 7;
+            btnSummary.Text = "Summary";
+            btnSummary.UseVisualStyleBackColor = true;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(10F, 25F);
@@ -937,5 +950,6 @@
         private CheckBox cbManualQty;
         private CheckBox cb6PCBs;
         private CheckBox cb24PCBs;
+        private Button btnSummary;
     }
 }

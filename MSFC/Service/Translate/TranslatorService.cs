@@ -68,25 +68,5 @@ namespace MSFC.Service.Translate
 
 
         private static bool ContainsIgnoreCase(string src, string val) => src?.IndexOf(val, StringComparison.OrdinalIgnoreCase) >= 0;
-
-        private static string ReplaceIgnoreCase(string source, string oldValue, string newValue)
-        {
-            if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(oldValue)) return source;
-            int idx = 0;
-            var sb = new StringBuilder();
-            while (idx < source.Length)
-            {
-                int found = source.IndexOf(oldValue, idx, StringComparison.OrdinalIgnoreCase);
-                if (found < 0)
-                {
-                    sb.Append(source, idx, source.Length - idx);
-                    break;
-                }
-                sb.Append(source, idx, found - idx);
-                sb.Append(newValue);
-                idx = found + oldValue.Length;
-            }
-            return sb.ToString();
-        }
     }
 }
