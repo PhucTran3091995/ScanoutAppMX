@@ -160,6 +160,7 @@ namespace MSFC
 
             cbManualQty.CheckedChanged += QuantityMode_CheckedChanged;
             cb6PCBs.CheckedChanged += QuantityMode_CheckedChanged;
+            cb20PCBs.CheckedChanged += QuantityMode_CheckedChanged;
             cb24PCBs.CheckedChanged += QuantityMode_CheckedChanged;
             SetupQuantityCheckboxes();
 
@@ -250,6 +251,7 @@ namespace MSFC
             _suppressQuantityEvents = true;
             cbManualQty.Checked = true;
             cb6PCBs.Checked = false;
+            cb20PCBs.Checked = false;
             cb24PCBs.Checked = false;
             _suppressQuantityEvents = false;
         }
@@ -262,6 +264,7 @@ namespace MSFC
             if (!ReferenceEquals(changed, cbManualQty)) cbManualQty.Checked = false;
             if (!ReferenceEquals(changed, cb6PCBs)) cb6PCBs.Checked = false;
             if (!ReferenceEquals(changed, cb24PCBs)) cb24PCBs.Checked = false;
+            if (!ReferenceEquals(changed, cb20PCBs)) cb20PCBs.Checked = false;
             _suppressQuantityEvents = false;
 
             TryAutoPrintByQuantity();
@@ -271,7 +274,7 @@ namespace MSFC
         {
             if (!int.TryParse(lbPreviewScanQty.Text, out var qty)) return;
 
-            if ((cb6PCBs.Checked && qty == 6) || (cb24PCBs.Checked && qty == 24))
+            if ((cb6PCBs.Checked && qty == 6) || (cb24PCBs.Checked && qty == 24) || (cb20PCBs.Checked && qty == 20))
             {
                 btnPrint.PerformClick();
             }
@@ -1884,6 +1887,15 @@ namespace MSFC
                 btnPrint.PerformClick();
                 e.Handled = true;
             }
+        }
+
+        private void btnSummary_Click(object sender, EventArgs e)
+        {
+            var summaryForm = new Summary(_dbFactory, _ClientIp)
+            {
+                StartPosition = FormStartPosition.CenterParent
+            };
+            summaryForm.Show(this);
         }
     }
     // 1) Helper: STA worker (một thread STA có queue)
